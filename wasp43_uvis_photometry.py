@@ -54,12 +54,12 @@ if __name__ == '__main__':
     # wasp43.do_phot()  # Default Settings
 
     min_aper_width = 1
-    max_aper_width = 2
+    max_aper_width = 100
     min_aper_height = 1
-    max_aper_height = 2
+    max_aper_height = 300
 
-    aper_widths = np.arange(min_aper_width, max_aper_width + 1)  # + 2, 5)
-    aper_heights = np.arange(min_aper_height, max_aper_height + 1)  # + 2, 5)
+    aper_widths = np.arange(min_aper_width, max_aper_width + 2, 5)
+    aper_heights = np.arange(min_aper_height, max_aper_height + 2, 5)
     wasp43.do_multi_phot(aper_widths, aper_heights)
 
     if clargs.plot_verbose:

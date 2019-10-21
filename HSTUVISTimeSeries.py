@@ -476,12 +476,17 @@ class HSTUVISTimeSeries(object):
 
         # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper_)]
         start = time()
-        info_message('Computing Aperture Photomery per Image')
+        info_message('Computing Aperture Photometry per Image')
         pool = mp.Pool(mp.cpu_count() - 1)
         aper_phots = pool.starmap(partial_aper_phot, zipper_)
         pool.close()
         pool.join()
 
+        rtime = time() - start
+        msg = f'Operation took {rtime} seconds for {n_apertures} apertures.'
+        info_message(msg)
+
+        info_message(f'Restructuring Aperture Photometry into DataFrames')
         aper_df = aper_phots[0].to_pandas()
 
         for kimg in aper_phots[1:]:
@@ -533,10 +538,6 @@ class HSTUVISTimeSeries(object):
             self.fluxes['thetas'][id_] = theta
             self.fluxes['fluxes'][id_] = flux_
             self.fluxes['errors'][id_] = err_
-
-        rtime = time() - start
-        msg = f'Operation took {rtime} seconds for {len(apertures)} apertures.'
-        info_message(msg)
 
     def load_data(self, load_filename=None):
         self.fits_dict = {}
