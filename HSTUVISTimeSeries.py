@@ -333,11 +333,11 @@ class HSTUVISTimeSeries(object):
         cw_sky_bgs = np.zeros((self.n_images, self.width))
         yinds, _ = np.indices(self.image_shape)
 
-        iterator = enumerate(self.image_stack, self.trace_ycenters)
-        for k, image, ycenter in tqdm(iterator, total=self.n_images):
+        iterator = enumerate(zip(self.image_stack, self.trace_ycenters))
+        for k, (image, ycenter) in tqdm(iterator, total=self.n_images):
             mask = abs(yinds - ycenter) > inner_height
             mask = np.bitwise_and(mask, yinds > edge)
-            mask = np.bitwise_and(mask, yinds < height - edge)
+            mask = np.bitwise_and(mask, yinds < self.height - edge)
             masked_img = np.ma.array(image, mask=mask)
             cw_sky_bgs[k] = np.ma.median(masked_img, axis=0).data
 
@@ -465,6 +465,7 @@ class HSTUVISTimeSeries(object):
 
                     n_apertures = n_apertures + 1
 
+        info_message('Configuing Photoutils.Aperture_Photometry')
         partial_aper_phot = partial(
             aperture_photometry, method='subpixel', subpixels=32)
 
@@ -473,11 +474,11 @@ class HSTUVISTimeSeries(object):
 
         zipper_ = zip(image_minus_sky_, apertures_stack)
 
-        # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper)]
+        # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper_)]
         start = time()
         info_message('Computing Aperture Photomery per Image')
         pool = mp.Pool(mp.cpu_count() - 1)
-        aper_phots = pool.starmap(partial_aper_phot, zipper)
+        aper_phots = pool.starmap(partial_aper_phot, zipper_)
         pool.close()
         pool.join()
 
@@ -514,13 +515,17 @@ class HSTUVISTimeSeries(object):
                   for colname in photometry_df.columns
                   if 'aperture_sum_' in colname]
 
+        errors = [np.sqrt(photometry_df[colname].values)
+                  for colname in photometry_df.columns
+                  if 'aperture_sum_' in colname]
+
         apertures_list = np.transpose(apertures_stack)[0]
 
-        zipper = zip(apertures_list, positions, mesh_widths,
-                     mesh_heights, thetas, fluxes, errors)
+        zipper_ = zip(apertures_list, positions, mesh_widths,
+                      mesh_heights, thetas, fluxes, errors)
 
-        for aper, pos, aper_width, aper_height, theta, flux_, err_ in zipper:
-            id_ = f'{int(time.time()*1e6):0>7}'
+        for aper, pos, aper_width, aper_height, theta, flux_, err_ in zipper_:
+            id_ = f'{int(time()*1e6):0>7}'
             self.fluxes['apertures'][id_] = aper
             self.fluxes['positions'][id_] = pos
             self.fluxes['aper_width'][id_] = aper_width

@@ -43,9 +43,9 @@ if __name__ == '__main__':
     working_dir = os.path.join(base_dir, 'github_analysis', 'savefiles')
 
     wasp43 = instantiate_wasp43(planet_name, data_dir, working_dir, file_type)
+
     wasp43.center_all_traces()
     wasp43.fit_trace_slopes()
-
     wasp43.identify_trace_direction()
     wasp43.clean_cosmic_rays()
     wasp43.compute_sky_background()
@@ -60,7 +60,7 @@ if __name__ == '__main__':
 
     aper_widths = np.arange(min_aper_width, max_aper_width + 1)  # + 2, 5)
     aper_heights = np.arange(min_aper_height, max_aper_height + 1)  # + 2, 5)
-    wasp43.do_multi_phot(aper_widths, aper_heights, position=None, theta=None)
+    wasp43.do_multi_phot(aper_widths, aper_heights)
 
     if clargs.plot_verbose:
         wasp43.plot_errorbars()
