@@ -408,7 +408,7 @@ class HSTUVISTimeSeries(object):
             # positions = [[self.width // 2, self.y_idx]] * n_images
             xcenters_ = self.trace_xcenters
             ycenters_ = self.trace_ycenters
-            positions = [xcenters_, ycenters_]
+            positions = np.transpose([xcenters_, ycenters_])
 
         if thetas is None:
             thetas = self.trace_angles
@@ -426,28 +426,28 @@ class HSTUVISTimeSeries(object):
             self.fluxes['errors'] = {}
 
         info_message('Creating Apertures')
-        apertures_stack = {}
+        n_apertures = 0
+        apertures_stack = []
         zipper_ = enumerate(zip(positions, thetas))
-        for kimg, (pos, theta) in tqdm(zipper_, total=n_images):
-            apertures_stack[kimg] = {}
+        for kimg, (pos, theta) in tqdm(zipper_, total=self.n_images):
+            apertures_stack.append([])
             for aper_height in aper_heights:
                 for aper_width in aper_widths:
-                    hw_key = f'{aper_height}_{aper_width}'
-                    apertures_stack[kimg][hw_key] = {}
+                    apertures_stack[kimg].append(RectangularAperture(
+                        pos, aper_width, aper_height, theta))
 
-                    apertures_stack[kimg][hw_key] = RectangularAperture(
-                        pos, aper_width, aper_height, theta)
+                    n_apertures = n_apertures + 1
 
         partial_aper_phot = partial(
             aperture_photometry, method='subpixel', subpixels=32)
 
-        apertures_ = apertures_stack.values()
+        zipper = zip(self.image_stack, apertures_stack)
 
+        # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper)]
         start = time()
         info_message('Computing Aperture Photomery per Image')
         pool = mp.Pool(mp.cpu_count() - 1)
-        aper_phots = pool.starmap(partial_aper_phot,
-                                  zip(self.image_stack, apertures_))
+        aper_phots = pool.starmap(partial_aper_phot, zipper)
         pool.close()
         pool.join()
 
@@ -458,19 +458,36 @@ class HSTUVISTimeSeries(object):
 
         photometry_df = aper_df.reset_index().drop(['index', 'id'], axis=1)
 
+        mesh_widths, mesh_heights = np.meshgrid(aper_widths, aper_heights)
+
+        mesh_widths = mesh_widths.flatten()
+        mesh_heights = mesh_heights.flatten()
+
+        aper_areas = mesh_heights * mesh_widths
+        for colname in photometry_df.columns:
+            if 'aperture_sum_' in colname:
+                aper_id = int(colname.replace('aperture_sum_', ''))
+                aper_widths_ = [mesh_widths[aper_id]] * self.n_images
+                aper_heights_ = [mesh_heights[aper_id]] * self.n_images
+                photometry_df[f'aper_width_{aper_id}'] = aper_widths_
+                photometry_df[f'aper_height_{aper_id}'] = aper_heights_
+                photometry_df[f'aper_area_{aper_id}'] = aper_areas[aper_id]
+
         if not hasattr(self, 'photometry_df'):
             self.photometry_df = photometry_df
         else:
             self.photometry_df = pd.concat([self.photometry_df, photometry_df])
 
-        n_apertures = len(apertures)
-        mesh_widths, mesh_heights = np.meshgrid(aper_widths, aper_heights)
+        thetas = [thetas] * n_apertures
+        positions = [positions] * n_apertures
+        fluxes = [photometry_df[colname].values
+                  for colname in photometry_df.columns
+                  if 'aperture_sum_' in colname]
 
-        mesh_widths = mesh_widths.flatten()
-        mesh_heights = mesh_heights.flatten()
-        thetas = [0] * n_apertures
-        positions = [pos] * n_apertures
-        zipper = zip(apertures, positions, mesh_widths,
+        apertures_list = []
+        for _ in range(self.n_images):
+            apertures_stack
+        zipper = zip(apertures_list, positions, mesh_widths,
                      mesh_heights, thetas, fluxes, errors)
 
         for aper, pos, aper_width, aper_height, theta, flux_, err_ in zipper:
