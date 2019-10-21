@@ -366,8 +366,10 @@ class HSTUVISTimeSeries(object):
 
         zipper = enumerate(zip(self.image_stack, positions, thetas))
 
-        for k, (image, pos, theta) in tqdm(zipper, total=n_images):
-            aperture = RectangularAperture(pos, aper_width, aper_height, theta)
+        info_message('Creating Apertures')
+        for kimg, (image, pos, theta) in tqdm(zipper, total=n_images):
+            aperture = RectangularAperture(
+                pos, aper_width, aper_height, theta)
             apertures_.append(aperture)
 
             if plot_verbose and not done_it:
@@ -382,7 +384,7 @@ class HSTUVISTimeSeries(object):
                                               subpixels=32)
 
             background = self.sky_bgs[k] * aperture.area
-            fluxes_[k] = image_table['aperture_sum'][0] - background
+            fluxes_[kimg] = image_table['aperture_sum'][0] - background
 
         errors_ = np.sqrt(fluxes_)  # explicitly state Poisson noise limit
 
@@ -396,7 +398,7 @@ class HSTUVISTimeSeries(object):
         self.fluxes['errors'][id_] = errors_
 
     def do_multi_phot(self, aper_widths, aper_heights,
-                      position=None, theta=None):
+                      positions=None, thetas=None):
 
         info_message('Beginning Multi-Aperture Photometry')
 
@@ -423,22 +425,29 @@ class HSTUVISTimeSeries(object):
             self.fluxes['fluxes'] = {}
             self.fluxes['errors'] = {}
 
-        zipper = enumerate(zip(aper_widths, aper_heights))
         info_message('Creating Apertures')
-        apertures = []
-        for aper_height in aper_heights:
-            for aper_width in aper_widths:
-                aperture = RectangularAperture(
-                    pos, aper_width, aper_height, theta)
-                apertures.append(aperture)
+        apertures_stack = {}
+        zipper_ = enumerate(zip(positions, thetas))
+        for kimg, (pos, theta) in tqdm(zipper_, total=n_images):
+            apertures_stack[kimg] = {}
+            for aper_height in aper_heights:
+                for aper_width in aper_widths:
+                    hw_key = f'{aper_height}_{aper_width}'
+                    apertures_stack[kimg][hw_key] = {}
 
-        partial_aper_phot = partial(aperture_photometry, apertures=apertures,
-                                    method='subpixel', subpixels=32)
+                    apertures_stack[kimg][hw_key] = RectangularAperture(
+                        pos, aper_width, aper_height, theta)
+
+        partial_aper_phot = partial(
+            aperture_photometry, method='subpixel', subpixels=32)
+
+        apertures_ = apertures_stack.values()
 
         start = time()
         info_message('Computing Aperture Photomery per Image')
         pool = mp.Pool(mp.cpu_count() - 1)
-        aper_phots = pool.starmap(partial_aper_phot, zip(self.image_stack))
+        aper_phots = pool.starmap(partial_aper_phot,
+                                  zip(self.image_stack, apertures_))
         pool.close()
         pool.join()
 
