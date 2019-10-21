@@ -35,6 +35,39 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
+def center_one_tace(kcol, col, fitter, stddev, y_idx, inds):
+    debug_message(f'kcol:{kcol}\ncol:{col.size}\nfitter:{fitter}')
+    debug_message(f'stddev:{stddev}\n{y_idx}\ninds:{inds.size}')
+
+    model = Gaussian1D(amplitude=col.max(),
+                       mean=y_idx, stddev=stddev)
+
+    results = fitter(model, inds, col)
+    return kcol, results, fitter
+
+
+def cosmic_ray_flag_simple(image_, nSig=5, window=7):
+    cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
+    for k, row in enumerate(image_):
+        row_Med = np.median(row)
+        row_Std = np.std(row)
+        cosmic_rays_[k] += abs(row - row_Med) > nSig * row_Std
+        image_[k][cosmic_rays_[k]] = row_Med
+
+    return image_, cosmic_rays_
+
+
+def cosmic_ray_flag_rolling(image_, nSig=5, window=7):
+    cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
+    for k, row in enumerate(image_):
+        row_rMed = pd.Series(row).rolling(window).median()
+        row_rStd = pd.Series(row).rolling(window).std()
+        cosmic_rays_[k] += abs(row - row_rMed) > nSig * row_rStd
+        image_[k][cosmic_rays_[k]] = row_rMed[cosmic_rays_[k]]
+
+    return image_, cosmic_rays_
+
+
 class HSTUVISTimeSeries(object):
 
     def __init__(self, planet_name='planetName', data_dir='./',
@@ -46,30 +79,8 @@ class HSTUVISTimeSeries(object):
         self.file_type = file_type
         self.configure_matplotlib()
 
-    @staticmethod
-    def cosmic_ray_flag_simple(image_, nSig=5, window=7):
-        cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
-        for k, row in enumerate(image_):
-            row_Med = np.median(row)
-            row_Std = np.std(row)
-            cosmic_rays_[k] += abs(row - row_Med) > nSig * row_Std
-            image_[k][cosmic_rays_[k]] = row_Med
-
-        return image_, cosmic_rays_
-
-    @staticmethod
-    def cosmic_ray_flag_rolling(image_, nSig=5, window=7):
-        cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
-        for k, row in enumerate(image_):
-            row_rMed = pd.Series(row).rolling(window).median()
-            row_rStd = pd.Series(row).rolling(window).std()
-            cosmic_rays_[k] += abs(row - row_rMed) > nSig * row_rStd
-            image_[k][cosmic_rays_[k]] = row_rMed[cosmic_rays_[k]]
-
-        return image_, cosmic_rays_
-
     def cosmic_ray_flag(self, image_, nSig=5, window=7):
-        return self.cosmic_ray_flag_simple(image_, nSig=nSig, window=window)
+        return cosmic_ray_flag_simple(image_, nSig=nSig, window=window)
 
     def clean_cosmic_rays(self, nSig=5, window=7):
         info_message('Flagging Cosmic Rays using `Temporal Simple` Technique')
@@ -109,38 +120,36 @@ class HSTUVISTimeSeries(object):
             self.image_stack[k] = image_clean_
             self.cosmic_rays[k] = cosmic_rays_
 
-    @staticmethod
-    def center_one_tace(kcol, image, stddev):
-        model = Gaussian1D(amplitude=col.max(),
-                           mean=self.y_idx, stddev=stddev)
-
-        results = fitter(model, inds, col)
-        return kcol, results, fitter
-
     def center_all_traces(self, stddev=2, plot_verbose=False):
         info_message('Computing the Center of the Trace')
         if not hasattr(self, 'height') or not hasattr(self, 'width'):
             self.height, self.width = self.image_shape
 
         inds = np.arange(self.height)
-        fitter = LevMarLSQFitter()
+        partial_center_one_tace = partial(center_one_tace,
+                                          fitter=LevMarLSQFitter(),
+                                          stddev=stddev,
+                                          y_idx=self.y_idx,
+                                          inds=inds)
+
         self.center_traces = {}
         for kimg, image in tqdm(enumerate(self.image_stack)):
             self.center_traces[kimg] = {}
 
-            partial_center_one_tace = partial(center_one_tace, stddev=stddev)
-
             start = time()
             info_message(f'Starting Multiprocess for Image {kimg}')
 
+            zipper = zip(np.arange(self.width),
+                         np.transpose(self.image_stack, axes=(0, 2, 1)))
+            """            
             pool = mp.Pool(mp.cpu_count() - 1)
-
-            zipper = zip(np.arange(self.width), self.image_stack)
-            center_traces_ = pool.starmap(self.center_one_tace, zipper)
+            center_traces_ = pool.starmap(partial_center_one_tace, zipper)
 
             pool.close()
             pool.join()
-
+            """
+            center_traces_ = [partial_center_one_tace(
+                *entry) for entry in zipper]
             rtime = time() - start
             info_message(f'Center computing Image {kimg} took {rtime} seconds')
 

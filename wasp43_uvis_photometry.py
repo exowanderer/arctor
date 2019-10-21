@@ -3,12 +3,26 @@ import os
 
 from HSTUVISTimeSeries import HSTUVISTimeSeries
 
+
+def instantiate_wasp43(planet_name, data_dir, working_dir, file_type):
+    wasp43 = HSTUVISTimeSeries(
+        planet_name=planet_name,
+        data_dir=data_dir,
+        working_dir=working_dir,
+        file_type=file_type)
+
+    joblib_filename = f'{planet_name}_savedict.joblib.save'
+    joblib_filename = f'{working_dir}/{joblib_filename}'
+    wasp43.load_data(joblib_filename)  # joblib_filename
+
+    return wasp43
+
 if __name__ == '__main__':
     from argparse import ArgumentParser
 
     parser = ArgumentParser()
 
-    parser.add_argument('--planet_name', type=str, default='planetName')
+    parser.add_argument('--planet_name', type=str, default=None)
     parser.add_argument('--file_type', type=str, default='flt.fits')
     parser.add_argument('--save_now', action='store_true')
     parser.add_argument('--fit_model_flag', action='store_true')
@@ -18,23 +32,18 @@ if __name__ == '__main__':
 
     clargs.plot_verbose = True
     clargs.save_now = True
-    clargs.planet_name = 'WASP43'
+    planet_name = 'WASP43' \
+        if clargs.planet_name is None else clargs.planet_name
+    file_type = clargs.file_type
 
     HOME = os.environ['HOME']
     base_dir = os.path.join(HOME, 'Research', 'Planets', 'WASP43')
     data_dir = os.path.join(base_dir, 'data', 'UVIS', 'MAST_2019-07-03T0738')
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
-    working_dir = os.path.join(base_dir, 'github_analysis')
+    working_dir = os.path.join(base_dir, 'github_analysis', 'savefiles')
 
-    wasp43 = HSTUVISTimeSeries(
-        planet_name=clargs.planet_name,
-        data_dir=data_dir,
-        working_dir=working_dir,
-        file_type=clargs.file_type)
-
-    joblib_filename = f'{clargs.planet_name}_savedict.joblib.save'
-    joblib_filename = f'{working_dir}/{joblib_filename}'
-    wasp43.load_data(joblib_filename)  # joblib_filename
+    wasp43 = instantiate_wasp43(planet_name, data_dir, working_dir, file_type)
+    wasp43.center_all_traces()
     # wasp43.identify_trace_direction()
     # wasp43.clean_cosmic_rays()
     # wasp43.compute_sky_background()
