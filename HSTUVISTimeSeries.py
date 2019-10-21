@@ -203,6 +203,8 @@ class HSTUVISTimeSeries(object):
             self.trace_slopes[kimg] = val['results'].slope.value
             self.trace_ycenters[kimg] = val['results'].intercept.value
 
+        self.trace_angles = np.arctan(self.trace_slopes)
+
         if plot_verbose:
             useful = gaussian_centers.T[self.x_left:self.x_right]
             fig, ax = plt.subplots()
@@ -264,12 +266,6 @@ class HSTUVISTimeSeries(object):
 
         x_width = self.x_right - self.x_left
 
-        if positions is None:
-            # positions = [[self.width // 2, self.y_idx]] * n_images
-            xcenters_ = self.trace_xcenters
-            ycenters_ = self.trace_ycenters
-            positions = [xcenters_, ycenters_]
-
         if inner_width is None:
             inner_width = 75
         if outer_width is None:
@@ -280,8 +276,14 @@ class HSTUVISTimeSeries(object):
         if outer_height is None:
             outer_height = 350
 
+        if positions is None:
+            # positions = [[self.width // 2, self.y_idx]] * n_images
+            xcenters_ = self.trace_xcenters
+            ycenters_ = self.trace_ycenters
+            positions = [xcenters_, ycenters_]
+
         if thetas is None:
-            thetas = [0] * n_images
+            thetas = self.trace_angles
 
         inner_width = x_width + inner_width
         outer_width = x_width + outer_width
@@ -331,16 +333,19 @@ class HSTUVISTimeSeries(object):
         x_width = self.x_right - self.x_left
 
         if positions is None:
-            positions = [[self.width // 2, self.y_idx]] * n_images
+            # positions = [[self.width // 2, self.y_idx]] * n_images
+            xcenters_ = self.trace_xcenters
+            ycenters_ = self.trace_ycenters
+            positions = [xcenters_, ycenters_]
+
+        if thetas is None:
+            thetas = self.trace_angles
 
         if aper_width is None:
             aper_width = 50
 
         if aper_height is None:
             aper_height = 200
-
-        if thetas is None:
-            thetas = [0] * n_images
 
         aper_width = x_width + aper_width
 
@@ -397,8 +402,14 @@ class HSTUVISTimeSeries(object):
 
         x_width = self.x_right - self.x_left
 
-        pos = [self.width // 2, self.y_idx] if position is None else position
-        theta = 0 if theta is None else theta
+        if positions is None:
+            # positions = [[self.width // 2, self.y_idx]] * n_images
+            xcenters_ = self.trace_xcenters
+            ycenters_ = self.trace_ycenters
+            positions = [xcenters_, ycenters_]
+
+        if thetas is None:
+            thetas = self.trace_angles
 
         aper_widths = x_width + aper_widths
 
