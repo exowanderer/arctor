@@ -68,7 +68,7 @@ if __name__ == '__main__':
 
     if clargs.save_now:
         # csv_filename = f'{clargs.planet_name}_photometry.csv'
-        joblib_filename = f'{clargs.planet_name}_savedict.joblib.save'
+        joblib_filename = f'{planet_name}_savedict.joblib.save'
 
         # csv_filename = f'{working_dir}/{csv_filename}'
         joblib_filename = f'{working_dir}/{joblib_filename}'

@@ -8,8 +8,9 @@ import warnings
 import multiprocessing as mp
 
 from astropy.io import fits
-from astropy.modeling.models import Gaussian1D
-from astropy.modeling.fitting import LevMarLSQFitter, SLSQPLSQFitter
+from astropy.modeling.models import Gaussian1D, Linear1D
+from astropy.modeling.fitting import LevMarLSQFitter, LinearLSQFitter
+# from astropy.modeling.fitting import SLSQPLSQFitter
 from astropy.stats import sigma_clipped_stats
 from astropy.visualization import simple_norm
 from functools import partial
@@ -35,12 +36,23 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def center_one_tace(kcol, col, fitter, stddev, y_idx, inds):
+def center_one_trace(kcol, col, fitter, stddev, y_idx, inds):
     model = Gaussian1D(amplitude=col.max(),
                        mean=y_idx, stddev=stddev)
 
     results = fitter(model, inds, col)
     return kcol, results, fitter
+
+
+def fit_one_slopes(kimg, means, fitter, y_idx, slope_guess=2.0 / 466):
+    model = Linear1D(slope=slope_guess, intercept=y_idx)
+
+    inds = np.arange(len(means))
+    inds = inds - np.median(inds)
+
+    results = fitter(model, inds, means)
+
+    return kimg, results, fitter
 
 
 def cosmic_ray_flag_simple(image_, nSig=5, window=7):
@@ -123,11 +135,11 @@ class HSTUVISTimeSeries(object):
             self.height, self.width = self.image_shape
 
         inds = np.arange(self.height)
-        partial_center_one_tace = partial(center_one_tace,
-                                          fitter=LevMarLSQFitter(),
-                                          stddev=stddev,
-                                          y_idx=self.y_idx,
-                                          inds=inds)
+        partial_center_one_trace = partial(center_one_trace,
+                                           fitter=LevMarLSQFitter(),
+                                           stddev=stddev,
+                                           y_idx=self.y_idx,
+                                           inds=inds)
 
         self.center_traces = {}
         for kimg, image in tqdm(enumerate(self.image_stack),
@@ -140,12 +152,12 @@ class HSTUVISTimeSeries(object):
             zipper = zip(np.arange(self.width), image.T)
 
             pool = mp.Pool(mp.cpu_count() - 1)
-            center_traces_ = pool.starmap(partial_center_one_tace, zipper)
+            center_traces_ = pool.starmap(partial_center_one_trace, zipper)
 
             pool.close()
             pool.join()
 
-            # center_traces_ = [partial_center_one_tace(
+            # center_traces_ = [partial_center_one_trace(
             #     *entry) for entry in zipper]
             rtime = time() - start
             info_message(f'Center computing Image {kimg} took {rtime} seconds')
@@ -158,15 +170,44 @@ class HSTUVISTimeSeries(object):
             if False and plot_verbose:
                 self.plot_trace_peaks(image)
 
-    def fit_trace_slope(self, image, stddev=2, plot_verbose=False):
+    def fit_trace_slope(self, stddev=2, plot_verbose=False):
         info_message('fitting a slope to the Center of the Trace')
         if not hasattr(self, 'center_traces'):
             self.center_all_traces(stddev=stddev, plot_verbose=plot_verbose)
 
-        gaussian_centers = np.zeros(width)
+        trace_width = self.x_right - self.x_left
+        self.gaussian_centers = np.zeros((self.n_images, self.width))
         for kimg, val0 in self.center_traces.items():
-            for kcol in val0.keys():
-                print(val0[kcol]['results'].mean)
+            for kcol, val1 in val0.items():
+                self.gaussian_centers[kimg][kcol] = val1['results'].mean.value
+
+        partial_fit_slp = partial(fit_one_slopes,
+                                  y_idx=self.y_idx,
+                                  fitter=LinearLSQFitter(),
+                                  slope_guess=2.0 / 466)
+
+        zipper = zip(np.arange(self.n_images),
+                     self.gaussian_centers[:, self.x_left:self.x_right])
+
+        slopInts = [partial_fit_slp(*entry) for entry in tqdm(zipper)]
+
+        self.image_line_fits = {}
+        for kimg, results, fitter in slopInts:
+            self.image_line_fits[kimg] = {}
+            self.image_line_fits[kimg]['results'] = results
+            self.image_line_fits[kimg]['fitter'] = fitter
+
+        self.image_slopes = np.ones(self.n_images)
+        self.image_intercepts = np.ones(self.n_images)
+        for kimg, val in self.image_line_fits.items():
+            self.image_slopes[kimg] = val['results'].slope.value
+            self.image_intercepts[kimg] = val['results'].intercept.value
+
+        if plot_verbose:
+            useful = gaussian_centers.T[self.x_left:self.x_right]
+            fig, ax = plt.subplots()
+            med_trace = np.median(useful, axis=0) * 0
+            ax.plot(useful - med_trace)
 
     def plot_trace_peaks(self, image):
         gauss_means = np.zeros(image_shape[1])
