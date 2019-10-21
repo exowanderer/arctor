@@ -36,9 +36,6 @@ def info_message(message, end='\n'):
 
 
 def center_one_tace(kcol, col, fitter, stddev, y_idx, inds):
-    debug_message(f'kcol:{kcol}\ncol:{col.size}\nfitter:{fitter}')
-    debug_message(f'stddev:{stddev}\n{y_idx}\ninds:{inds.size}')
-
     model = Gaussian1D(amplitude=col.max(),
                        mean=y_idx, stddev=stddev)
 
@@ -133,23 +130,23 @@ class HSTUVISTimeSeries(object):
                                           inds=inds)
 
         self.center_traces = {}
-        for kimg, image in tqdm(enumerate(self.image_stack)):
+        for kimg, image in tqdm(enumerate(self.image_stack),
+                                total=self.n_images):
             self.center_traces[kimg] = {}
 
             start = time()
             info_message(f'Starting Multiprocess for Image {kimg}')
 
-            zipper = zip(np.arange(self.width),
-                         np.transpose(self.image_stack, axes=(0, 2, 1)))
-            """            
+            zipper = zip(np.arange(self.width), image.T)
+
             pool = mp.Pool(mp.cpu_count() - 1)
             center_traces_ = pool.starmap(partial_center_one_tace, zipper)
 
             pool.close()
             pool.join()
-            """
-            center_traces_ = [partial_center_one_tace(
-                *entry) for entry in zipper]
+
+            # center_traces_ = [partial_center_one_tace(
+            #     *entry) for entry in zipper]
             rtime = time() - start
             info_message(f'Center computing Image {kimg} took {rtime} seconds')
 
