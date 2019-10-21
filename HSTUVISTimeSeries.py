@@ -197,11 +197,11 @@ class HSTUVISTimeSeries(object):
             self.image_line_fits[kimg]['results'] = results
             self.image_line_fits[kimg]['fitter'] = fitter
 
-        self.image_slopes = np.ones(self.n_images)
-        self.image_intercepts = np.ones(self.n_images)
+        self.trace_slopes = np.ones(self.n_images)
+        self.trace_ycenters = np.ones(self.n_images)
         for kimg, val in self.image_line_fits.items():
-            self.image_slopes[kimg] = val['results'].slope.value
-            self.image_intercepts[kimg] = val['results'].intercept.value
+            self.trace_slopes[kimg] = val['results'].slope.value
+            self.trace_ycenters[kimg] = val['results'].intercept.value
 
         if plot_verbose:
             useful = gaussian_centers.T[self.x_left:self.x_right]
@@ -265,7 +265,10 @@ class HSTUVISTimeSeries(object):
         x_width = self.x_right - self.x_left
 
         if positions is None:
-            positions = [[self.width // 2, self.y_idx]] * n_images
+            # positions = [[self.width // 2, self.y_idx]] * n_images
+            xcenters_ = self.trace_xcenters
+            ycenters_ = self.trace_ycenters
+            positions = [xcenters_, ycenters_]
 
         if inner_width is None:
             inner_width = 75
@@ -499,24 +502,44 @@ class HSTUVISTimeSeries(object):
             self.n_images = self.image_stack.shape[0]
             self.height, self.width = self.image_shape
 
-            self.calibration_trace_location()
+            if not hasattr(self, 'trace_location_calibrated'):
+                self.calibration_trace_location()
 
         info_message(f'Found {self.n_images} {self.file_type} files')
 
     def calibration_trace_location(self):
+        info_message(f'Calibration the Trace Location')
 
         # Median Argmax
         self.median_image = np.median(self.image_stack, axis=0)
         self.mad_image = sc.mad(self.image_stack, axis=0)
-        self.y_idx = np.median(self.image_stack[0].argmax(axis=0)).astype(int)
 
-        # The median trace as the 'stellar template'
+        # Median Trace configuration as the 'stellar template'
         self.median_trace = np.sum(self.median_image, axis=0)
-
+        self.y_idx = np.median(self.median_trace.argmax(axis=0)).astype(int)
         # Set left and right markers at halfway up the trace
         peak_trace = self.median_trace > 0.5 * self.median_trace.max()
         self.x_left = np.where(peak_trace)[0].min()
         self.x_right = np.where(peak_trace)[0].max()
+
+        # Trace configuration per image
+        self.y_argmaxes = np.zeros(self.n_images)
+        self.trace_mins = np.zeros(self.n_images)
+        self.trace_maxs = np.zeros(self.n_images)
+        for kimg, image in tqdm(enumerate(self.image_stack),
+                                total=self.n_images):
+            image_trace_ = np.sum(image, axis=0)
+            yargmax_ = np.median(image_trace_.argmax(axis=0)).astype(int)
+            self.y_argmaxes[kimg] = yargmax_
+
+            # Set left and right markers at halfway up the trace
+            peak_trace_ = image_trace_ > 0.5 * image_trace_.max()
+            self.trace_mins[kimg] = np.where(peak_trace_)[0].min()
+            self.trace_maxs[kimg] = np.where(peak_trace_)[0].max()
+
+        self.trace_xcenters = 0.5 * (self.trace_mins + self.trace_maxs)
+
+        self.trace_location_calibrated = True
 
     def do_fit(self, init_params=[], static_params={}):
         return
