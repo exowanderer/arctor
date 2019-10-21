@@ -18,6 +18,7 @@ from glob import glob
 from matplotlib import pyplot as plt
 from photutils import RectangularAperture, RectangularAnnulus
 from photutils import aperture_photometry
+from scipy.interpolate import CubicSpline
 from scipy.optimize import minimize
 from statsmodels.robust import scale as sc
 from time import time
@@ -170,12 +171,11 @@ class HSTUVISTimeSeries(object):
             if False and plot_verbose:
                 self.plot_trace_peaks(image)
 
-    def fit_trace_slope(self, stddev=2, plot_verbose=False):
+    def fit_trace_slopes(self, stddev=2, plot_verbose=False):
         info_message('fitting a slope to the Center of the Trace')
         if not hasattr(self, 'center_traces'):
             self.center_all_traces(stddev=stddev, plot_verbose=plot_verbose)
 
-        trace_width = self.x_right - self.x_left
         self.gaussian_centers = np.zeros((self.n_images, self.width))
         for kimg, val0 in self.center_traces.items():
             for kcol, val1 in val0.items():
@@ -187,7 +187,7 @@ class HSTUVISTimeSeries(object):
                                   slope_guess=2.0 / 466)
 
         zipper = zip(np.arange(self.n_images),
-                     self.gaussian_centers[:, self.x_left:self.x_right])
+                     self.gaussian_centers[:, self.x_left_idx:self.x_right_idx])
 
         slopInts = [partial_fit_slp(*entry) for entry in tqdm(zipper)]
 
@@ -206,7 +206,7 @@ class HSTUVISTimeSeries(object):
         self.trace_angles = np.arctan(self.trace_slopes)
 
         if plot_verbose:
-            useful = gaussian_centers.T[self.x_left:self.x_right]
+            useful = gaussian_centers.T[self.x_left_idx:self.x_right_idx]
             fig, ax = plt.subplots()
             med_trace = np.median(useful, axis=0) * 0
             ax.plot(useful - med_trace)
@@ -315,6 +315,33 @@ class HSTUVISTimeSeries(object):
             sky_bgs[k] = (outer_flux - inner_flux) / background_area
 
         self.sky_bgs = sky_bgs
+
+    def compute_columnwise_sky_background(self, inner_height=150, edge=10):
+        '''
+            Run photometry for a specifc set of rectangles
+
+            Parameters
+            ----------
+            positions (nD-array; 2 x n_images): (xcenter, ycenter)
+            widths (nD-array; 3 x n_images):
+                    (aperture, inner_annular, outer_annular)
+            heights (nD-array; 3 x n_images):
+                    (aperture, inner_annular, outer_annular)
+        '''
+
+        x_width = self.x_right - self.x_left
+        cw_sky_bgs = np.zeros((self.n_images, self.width))
+        yinds, _ = np.indices(self.image_shape)
+
+        iterator = enumerate(self.image_stack, self.trace_ycenters)
+        for k, image, ycenter in tqdm(iterator, total=self.n_images):
+            mask = abs(yinds - ycenter) > inner_height
+            mask = np.bitwise_and(mask, yinds > edge)
+            mask = np.bitwise_and(mask, yinds < height - edge)
+            masked_img = np.ma.array(image, mask=mask)
+            cw_sky_bgs[k] = np.ma.median(masked_img, axis=0).data
+
+        self.sky_bg_columnwise = cw_sky_bgs
 
     def do_phot(self, positions=None,
                 aper_width=None, aper_height=None,
@@ -441,7 +468,10 @@ class HSTUVISTimeSeries(object):
         partial_aper_phot = partial(
             aperture_photometry, method='subpixel', subpixels=32)
 
-        zipper = zip(self.image_stack, apertures_stack)
+        zipper_ = zip(self.image_stack, self.sky_bgs)
+        image_minus_sky_ = [img - sky for img, sky in zipper_]
+
+        zipper_ = zip(image_minus_sky_, apertures_stack)
 
         # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper)]
         start = time()
@@ -484,9 +514,8 @@ class HSTUVISTimeSeries(object):
                   for colname in photometry_df.columns
                   if 'aperture_sum_' in colname]
 
-        apertures_list = []
-        for _ in range(self.n_images):
-            apertures_stack
+        apertures_list = np.transpose(apertures_stack)[0]
+
         zipper = zip(apertures_list, positions, mesh_widths,
                      mesh_heights, thetas, fluxes, errors)
 
@@ -544,7 +573,7 @@ class HSTUVISTimeSeries(object):
 
         info_message(f'Found {self.n_images} {self.file_type} files')
 
-    def calibration_trace_location(self):
+    def calibration_trace_location(self, oversample=100):
         info_message(f'Calibration the Trace Location')
 
         # Median Argmax
@@ -556,8 +585,16 @@ class HSTUVISTimeSeries(object):
         self.y_idx = np.median(self.median_trace.argmax(axis=0)).astype(int)
         # Set left and right markers at halfway up the trace
         peak_trace = self.median_trace > 0.5 * self.median_trace.max()
-        self.x_left = np.where(peak_trace)[0].min()
-        self.x_right = np.where(peak_trace)[0].max()
+        self.x_left_idx = np.where(peak_trace)[0].min()
+        self.x_right_idx = np.where(peak_trace)[0].max()
+
+        cs_trace = CubicSpline(np.arange(self.width), self.median_trace)
+        os_xarr = np.linspace(0, self.width, self.width * oversample)
+        os_trace = cs_trace(os_xarr)  # oversampled trace
+        peak_trace = os_trace > 0.5 * os_trace.max()
+
+        self.x_left = os_xarr[np.where(peak_trace)[0].min()]
+        self.x_right = os_xarr[np.where(peak_trace)[0].max()]
 
         # Trace configuration per image
         self.y_argmaxes = np.zeros(self.n_images)
@@ -566,13 +603,17 @@ class HSTUVISTimeSeries(object):
         for kimg, image in tqdm(enumerate(self.image_stack),
                                 total=self.n_images):
             image_trace_ = np.sum(image, axis=0)
+
             yargmax_ = np.median(image_trace_.argmax(axis=0)).astype(int)
             self.y_argmaxes[kimg] = yargmax_
 
+            cs_trace = CubicSpline(np.arange(self.width), image_trace_)
+            os_trace = cs_trace(os_xarr)  # oversampled trace
+
             # Set left and right markers at halfway up the trace
-            peak_trace_ = image_trace_ > 0.5 * image_trace_.max()
-            self.trace_mins[kimg] = np.where(peak_trace_)[0].min()
-            self.trace_maxs[kimg] = np.where(peak_trace_)[0].max()
+            peak_trace_ = os_trace > 0.5 * os_trace.max()
+            self.trace_mins[kimg] = os_xarr[np.where(peak_trace_)[0].min()]
+            self.trace_maxs[kimg] = os_xarr[np.where(peak_trace_)[0].max()]
 
         self.trace_xcenters = 0.5 * (self.trace_mins + self.trace_maxs)
 

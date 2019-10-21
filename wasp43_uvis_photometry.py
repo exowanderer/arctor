@@ -44,19 +44,22 @@ if __name__ == '__main__':
 
     wasp43 = instantiate_wasp43(planet_name, data_dir, working_dir, file_type)
     wasp43.center_all_traces()
-    # wasp43.identify_trace_direction()
-    # wasp43.clean_cosmic_rays()
-    # wasp43.compute_sky_background()
+    wasp43.fit_trace_slopes()
+
+    wasp43.identify_trace_direction()
+    wasp43.clean_cosmic_rays()
+    wasp43.compute_sky_background()
+    wasp43.compute_columnwise_sky_background()
 
     # wasp43.do_phot()  # Default Settings
 
     min_aper_width = 1
-    max_aper_width = 100
+    max_aper_width = 2
     min_aper_height = 1
-    max_aper_height = 300
+    max_aper_height = 2
 
-    aper_widths = np.arange(min_aper_width, max_aper_width + 2, 5)
-    aper_heights = np.arange(min_aper_height, max_aper_height + 2, 5)
+    aper_widths = np.arange(min_aper_width, max_aper_width + 1)  # + 2, 5)
+    aper_heights = np.arange(min_aper_height, max_aper_height + 1)  # + 2, 5)
     wasp43.do_multi_phot(aper_widths, aper_heights, position=None, theta=None)
 
     if clargs.plot_verbose:
