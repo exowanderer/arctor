@@ -78,6 +78,39 @@ def cosmic_ray_flag_rolling(image_, nSig=5, window=7):
     return image_, cosmic_rays_
 
 
+def aper_table_2_df(aper_phots, n_images):
+    info_message(f'Restructuring Aperture Photometry into DataFrames')
+    if len(aper_phots) > 1:
+        aper_df = aper_phots[0].to_pandas()
+        for kimg in aper_phots[1:]:
+            aper_df = pd.concat([aper_df, kimg.to_pandas()])
+    else:
+        aper_df = aper_phots.to_pandas()
+
+    photometry_df = aper_df.reset_index().drop(['index', 'id'], axis=1)
+
+    mesh_widths, mesh_heights = np.meshgrid(aper_widths, aper_heights)
+
+    mesh_widths = mesh_widths.flatten()
+    mesh_heights = mesh_heights.flatten()
+
+    aper_areas = mesh_heights * mesh_widths
+    for colname in photometry_df.columns:
+        if 'aperture_sum_' in colname:
+            aper_id = int(colname.replace('aperture_sum_', ''))
+            aper_widths_ = [mesh_widths[aper_id]] * n_images
+            aper_heights_ = [mesh_heights[aper_id]] * n_images
+            photometry_df[f'aper_width_{aper_id}'] = aper_widths_
+            photometry_df[f'aper_height_{aper_id}'] = aper_heights_
+            photometry_df[f'aper_area_{aper_id}'] = aper_areas[aper_id]
+
+
+def make_mask_cosmic_rays_temporal_simple(val, kcol, krow):
+    val_Med = np.median(val)
+    val_Std = np.std(val)
+    return kcol, krow, abs(val - val_Med) > nSig * val_Std, val_Med
+
+
 class HSTUVISTimeSeries(object):
 
     def __init__(self, planet_name='planetName', data_dir='./',
@@ -108,7 +141,23 @@ class HSTUVISTimeSeries(object):
                 self.image_stack[mask, kcol, krow] = val_Med[mask]
 
     def clean_cosmic_rays_temporal_simple(self, nSig=5, window=7):
+        n_pixels = self.width * self.height
+        krows, kcols = np.indices((self.height, self.width))
+        pixels = self.image_stack.reshape((n_pixels, self.n_images))
+        pool = mp.Pool(mp.cpu_count() - 1)
+        masks = pool.starmap(make_mask_cosmic_rays_temporal_simple,
+                             zip(pixels, kcols.flatten(), krows.flatten()))
+        pool.close()
+        pool.join()
+
+        for kcol, krow, mask, val_Med in tqdm(masks):
+            self.cosmic_rays[:, kcol, krow] = mask
+            self.image_stack[mask, kcol, krow] = val_Med
+
+    def orig_clean_cosmic_rays_temporal_simple(self, nSig=5, window=7):
         self.cosmic_rays = np.zeros_like(self.image_stack)
+        krows, kcols = np.indices((self.height, self.width))
+
         for krow in tqdm(range(self.width)):
             for kcol in range(self.height):
                 val = self.image_stack[:, kcol, krow]
@@ -130,7 +179,7 @@ class HSTUVISTimeSeries(object):
             self.image_stack[k] = image_clean_
             self.cosmic_rays[k] = cosmic_rays_
 
-    def center_all_traces(self, stddev=2, plot_verbose=False):
+    def center_all_traces(self, stddev=2, notit_verbose=False):
         info_message('Computing the Center of the Trace')
         if not hasattr(self, 'height') or not hasattr(self, 'width'):
             self.height, self.width = self.image_shape
@@ -168,13 +217,10 @@ class HSTUVISTimeSeries(object):
                 self.center_traces[kimg][kcol]['results'] = results
                 self.center_traces[kimg][kcol]['fitter'] = fitter
 
-            if False and plot_verbose:
-                self.plot_trace_peaks(image)
-
-    def fit_trace_slopes(self, stddev=2, plot_verbose=False):
+    def fit_trace_slopes(self, stddev=2, notit_verbose=False):
         info_message('fitting a slope to the Center of the Trace')
         if not hasattr(self, 'center_traces'):
-            self.center_all_traces(stddev=stddev, plot_verbose=plot_verbose)
+            self.center_all_traces(stddev=stddev, notit_verbose=notit_verbose)
 
         self.gaussian_centers = np.zeros((self.n_images, self.width))
         for kimg, val0 in self.center_traces.items():
@@ -205,51 +251,16 @@ class HSTUVISTimeSeries(object):
 
         self.trace_angles = np.arctan(self.trace_slopes)
 
-        if plot_verbose:
+        if notit_verbose:
             useful = gaussian_centers.T[self.x_left_idx:self.x_right_idx]
             fig, ax = plt.subplots()
             med_trace = np.median(useful, axis=0) * 0
             ax.plot(useful - med_trace)
 
-    def plot_trace_peaks(self, image):
-        gauss_means = np.zeros(image_shape[1])
-        for key, val in self.center_traces.items():
-            gauss_means[key] = val['results'].mean.value
-
-        norm = simple_norm(image, 'sqrt', percent=99)
-        plt.imshow(image, norm=norm)
-        plt.plot(np.arange(image_shape[1]), gauss_means,
-                 'o', color='C1', ms=1)
-
-        plt.xlim(0, image_shape[1])
-        plt.ylim(0, image_shape[0])
-        plt.tight_layout()
-        plt.axis('off')
-        plt.waitforbuttonpress()
-
-    @staticmethod
-    def plot_apertures(image, aperture,
-                       inner_annular=None, outer_annular=None):
-        norm = simple_norm(image, 'sqrt', percent=99)
-
-        plt.imshow(image, norm=norm)
-
-        aperture.plot(color='white', lw=2)
-
-        if inner_annular is not None:
-            inner_annular.plot(color='red', lw=2)
-
-        if outer_annular is not None:
-            outer_annular.plot(color='violet', lw=2)
-
-        plt.axis('off')
-        plt.tight_layout()
-        plt.waitforbuttonpress()
-
     def compute_sky_background(self, positions=None,
                                inner_width=None, outer_width=None,
                                inner_height=None, outer_height=None,
-                               thetas=None, plot_verbose=False, done_it=False):
+                               thetas=None, notit_verbose=False, done_it=False):
         '''
             Run photometry for a specifc set of rectangles
 
@@ -263,8 +274,6 @@ class HSTUVISTimeSeries(object):
         '''
 
         n_images = self.n_images  # convenience for minimizing command lengths
-
-        x_width = self.x_right - self.x_left
 
         if inner_width is None:
             inner_width = 75
@@ -285,8 +294,8 @@ class HSTUVISTimeSeries(object):
         if thetas is None:
             thetas = self.trace_angles
 
-        inner_width = x_width + inner_width
-        outer_width = x_width + outer_width
+        inner_width = self.trace_length + inner_width
+        outer_width = self.trace_length + outer_width
 
         sky_bgs = np.zeros(n_images)
 
@@ -305,9 +314,9 @@ class HSTUVISTimeSeries(object):
             self.inner_annulars.append(inner_annular)
 
             inner_table = aperture_photometry(image, inner_annular,
-                                              method='subpixel', subpixels=32)
+                                              method='subpixel', subpixels=5)
             outer_table = aperture_photometry(image, outer_annular,
-                                              method='subpixel', subpixels=32)
+                                              method='subpixel', subpixels=5)
 
             inner_flux = inner_table['aperture_sum'][0]
             outer_flux = outer_table['aperture_sum'][0]
@@ -329,7 +338,6 @@ class HSTUVISTimeSeries(object):
                     (aperture, inner_annular, outer_annular)
         '''
 
-        x_width = self.x_right - self.x_left
         cw_sky_bgs = np.zeros((self.n_images, self.width))
         yinds, _ = np.indices(self.image_shape)
 
@@ -345,7 +353,7 @@ class HSTUVISTimeSeries(object):
 
     def do_phot(self, positions=None,
                 aper_width=None, aper_height=None,
-                thetas=None, plot_verbose=False, done_it=False):
+                thetas=None, notit_verbose=False, done_it=False):
         '''
             Run photometry for a specifc set of rectangles
 
@@ -357,7 +365,6 @@ class HSTUVISTimeSeries(object):
         '''
 
         n_images = self.n_images  # convenience for minimizing command lengths
-        x_width = self.x_right - self.x_left
 
         if positions is None:
             # positions = [[self.width // 2, self.y_idx]] * n_images
@@ -374,8 +381,8 @@ class HSTUVISTimeSeries(object):
         if aper_height is None:
             aper_height = 200
 
-        aper_width = x_width + aper_width
-
+        aper_width = self.trace_length + aper_width
+        """
         if not hasattr(self, 'fluxes'):
             self.fluxes = {}
             self.fluxes['apertures'] = {}
@@ -385,7 +392,7 @@ class HSTUVISTimeSeries(object):
             self.fluxes['thetas'] = {}
             self.fluxes['fluxes'] = {}
             self.fluxes['errors'] = {}
-
+        """
         fluxes_ = np.zeros(n_images)
         errors_ = np.zeros(n_images)
 
@@ -399,7 +406,7 @@ class HSTUVISTimeSeries(object):
                 pos, aper_width, aper_height, theta)
             apertures_.append(aperture)
 
-            if plot_verbose and not done_it:
+            if notit_verbose and not done_it:
                 aperture = apertures_[k]
                 inner_annular = self.inner_annulars[k]
                 outer_annular = self.outer_annulars[k]
@@ -408,13 +415,13 @@ class HSTUVISTimeSeries(object):
 
             image_table = aperture_photometry(image, aperture,
                                               method='subpixel',
-                                              subpixels=32)
+                                              subpixels=5)
 
             background = self.sky_bgs[k] * aperture.area
             fluxes_[kimg] = image_table['aperture_sum'][0] - background
 
         errors_ = np.sqrt(fluxes_)  # explicitly state Poisson noise limit
-
+        """
         id_ = f'{np.random.randint(1e7):0>7}'
         self.fluxes['apertures'][id_] = apertures_
         self.fluxes['positions'][id_] = positions
@@ -423,13 +430,12 @@ class HSTUVISTimeSeries(object):
         self.fluxes['thetas'][id_] = thetas
         self.fluxes['fluxes'][id_] = fluxes_
         self.fluxes['errors'][id_] = errors_
+        """
 
     def do_multi_phot(self, aper_widths, aper_heights,
                       positions=None, thetas=None):
 
         info_message('Beginning Multi-Aperture Photometry')
-
-        x_width = self.x_right - self.x_left
 
         if positions is None:
             # positions = [[self.width // 2, self.y_idx]] * n_images
@@ -440,8 +446,8 @@ class HSTUVISTimeSeries(object):
         if thetas is None:
             thetas = self.trace_angles
 
-        aper_widths = x_width + aper_widths
-
+        aper_widths = self.trace_length + aper_widths
+        '''
         if not hasattr(self, 'fluxes'):
             self.fluxes = {}
             self.fluxes['apertures'] = {}
@@ -451,7 +457,7 @@ class HSTUVISTimeSeries(object):
             self.fluxes['thetas'] = {}
             self.fluxes['fluxes'] = {}
             self.fluxes['errors'] = {}
-
+        '''
         info_message('Creating Apertures')
         n_apertures = 0
         apertures_stack = []
@@ -467,7 +473,7 @@ class HSTUVISTimeSeries(object):
 
         info_message('Configuing Photoutils.Aperture_Photometry')
         partial_aper_phot = partial(
-            aperture_photometry, method='subpixel', subpixels=32)
+            aperture_photometry, method='subpixel', subpixels=5)
 
         zipper_ = zip(self.image_stack, self.sky_bgs)
         image_minus_sky_ = [img - sky for img, sky in zipper_]
@@ -486,60 +492,23 @@ class HSTUVISTimeSeries(object):
         msg = f'Operation took {rtime} seconds for {n_apertures} apertures.'
         info_message(msg)
 
-        info_message(f'Restructuring Aperture Photometry into DataFrames')
-        aper_df = aper_phots[0].to_pandas()
+        # Store raw output of all photometry to mega-list
+        if hasattr(self, 'aper_phots'):
+            self.aper_phots.extend(aper_phots)
+        else:
+            self.aper_phots = aper_phots
 
-        for kimg in aper_phots[1:]:
-            aper_df = pd.concat([aper_df, kimg.to_pandas()])
+        # Convert to dataframe
+        photometry_df = aper_table_2_df(aper_phots, self.n_images)
 
-        photometry_df = aper_df.reset_index().drop(['index', 'id'], axis=1)
-
-        mesh_widths, mesh_heights = np.meshgrid(aper_widths, aper_heights)
-
-        mesh_widths = mesh_widths.flatten()
-        mesh_heights = mesh_heights.flatten()
-
-        aper_areas = mesh_heights * mesh_widths
-        for colname in photometry_df.columns:
-            if 'aperture_sum_' in colname:
-                aper_id = int(colname.replace('aperture_sum_', ''))
-                aper_widths_ = [mesh_widths[aper_id]] * self.n_images
-                aper_heights_ = [mesh_heights[aper_id]] * self.n_images
-                photometry_df[f'aper_width_{aper_id}'] = aper_widths_
-                photometry_df[f'aper_height_{aper_id}'] = aper_heights_
-                photometry_df[f'aper_area_{aper_id}'] = aper_areas[aper_id]
-
+        # Store new dataframe to object dataframe
         if not hasattr(self, 'photometry_df'):
             self.photometry_df = photometry_df
         else:
             self.photometry_df = pd.concat([self.photometry_df, photometry_df])
 
-        thetas = [thetas] * n_apertures
-        positions = [positions] * n_apertures
-        fluxes = [photometry_df[colname].values
-                  for colname in photometry_df.columns
-                  if 'aperture_sum_' in colname]
-
-        errors = [np.sqrt(photometry_df[colname].values)
-                  for colname in photometry_df.columns
-                  if 'aperture_sum_' in colname]
-
-        apertures_list = np.transpose(apertures_stack)[0]
-
-        zipper_ = zip(apertures_list, positions, mesh_widths,
-                      mesh_heights, thetas, fluxes, errors)
-
-        for aper, pos, aper_width, aper_height, theta, flux_, err_ in zipper_:
-            id_ = f'{int(time()*1e6):0>7}'
-            self.fluxes['apertures'][id_] = aper
-            self.fluxes['positions'][id_] = pos
-            self.fluxes['aper_width'][id_] = aper_width
-            self.fluxes['aper_height'][id_] = aper_height
-            self.fluxes['thetas'][id_] = theta
-            self.fluxes['fluxes'][id_] = flux_
-            self.fluxes['errors'][id_] = err_
-
     def load_data(self, load_filename=None):
+        info_message(f'Loading Fits Files')
         self.fits_dict = {}
         fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
         for fname in tqdm(fits_filenames, total=len(fits_filenames)):
@@ -548,8 +517,10 @@ class HSTUVISTimeSeries(object):
             self.fits_dict[key] = val
 
         if load_filename is not None:
+            info_message(f'Loading Save Object-Dict File')
             self.load_dict(load_filename)
         else:
+            info_message(f'Creating New Flux/Error/Time Attributes')
             fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
 
             times = []
@@ -566,9 +537,11 @@ class HSTUVISTimeSeries(object):
                 errors_stack.append(val['ERR'].data)
                 times.append(np.mean([header['EXPEND'], header['EXPSTART']]))
 
-            self.image_stack = np.array(image_stack)
-            self.errors_stack = np.array(errors_stack)
-            self.times = np.array(times)
+            times_sort = np.argsort(times)
+            self.times = np.array(times)[times_sort]
+            self.image_stack = np.array(image_stack)[times_sort]
+            self.errors_stack = np.array(errors_stack)[times_sort]
+
             # self.fits_dict = fits_dict
             self.image_shape = self.image_stack[0].shape
             self.n_images = self.image_stack.shape[0]
@@ -576,11 +549,20 @@ class HSTUVISTimeSeries(object):
 
             if not hasattr(self, 'trace_location_calibrated'):
                 self.calibration_trace_location()
+                self.identify_trace_direction()
+                self.simple_phots()
 
         info_message(f'Found {self.n_images} {self.file_type} files')
 
+    def simple_phots(self):
+        self.simple_fluxes = np.zeros(self.n_images)
+        for kimg, image in tqdm(enumerate(self.image_stack),
+                                total=self.n_images):
+
+            self.simple_fluxes[kimg] = np.sum(image - np.median(image))
+
     def calibration_trace_location(self, oversample=100):
-        info_message(f'Calibration the Trace Location')
+        info_message(f'Calibration the Median Trace Location')
 
         # Median Argmax
         self.median_image = np.median(self.image_stack, axis=0)
@@ -601,7 +583,9 @@ class HSTUVISTimeSeries(object):
 
         self.x_left = os_xarr[np.where(peak_trace)[0].min()]
         self.x_right = os_xarr[np.where(peak_trace)[0].max()]
+        self.trace_length = self.x_right - self.x_left
 
+        info_message(f'Calibration the Per Image Trace Location')
         # Trace configuration per image
         self.y_argmaxes = np.zeros(self.n_images)
         self.trace_mins = np.zeros(self.n_images)
@@ -622,9 +606,10 @@ class HSTUVISTimeSeries(object):
             self.trace_maxs[kimg] = os_xarr[np.where(peak_trace_)[0].max()]
 
         self.trace_xcenters = 0.5 * (self.trace_mins + self.trace_maxs)
+        self.trace_lengths = (self.trace_maxs - self.trace_mins)
 
         self.trace_location_calibrated = True
-
+    """
     def do_fit(self, init_params=[], static_params={}):
         return
         partial_chisq = partial(chisq, times=self.times,
@@ -636,15 +621,17 @@ class HSTUVISTimeSeries(object):
 
     def batman_wrapper(self, eclipse_depth, static_params):
         return
-
+    
     def chisq(self, params, static_params):
         model = batman_wrapper(params,
                                self.times,
                                static_params)
 
         return np.sum(((model - self.fluxes) / self.errors)**2)
+    """
 
     def identify_trace_direction(self):
+        info_message(f'Identifying Trace Direction per Image')
         postargs1 = np.zeros(len(self.fits_dict))
         postargs2 = np.zeros(len(self.fits_dict))
         for k, (key, val) in enumerate(self.fits_dict.items()):
@@ -678,66 +665,6 @@ class HSTUVISTimeSeries(object):
         plt.rcParams["font.family"] = "sans-serif"
         plt.rcParams["font.sans-serif"] = ["Liberation Sans"]
         plt.rcParams["mathtext.fontset"] = "custom"
-
-    def plot_errorbars(self, id_=None):
-
-        id_ = list(self.fluxes['apertures'].keys())[0] if id_ is None else id_
-
-        fluxes_ = self.fluxes['fluxes'][id_]
-        fwd_fluxes_ = fluxes_[self.idx_fwd]
-        rev_fluxes_ = fluxes_[self.idx_rev]
-
-        med_flux = np.median(fluxes_)
-        fwd_scatter = np.std(fwd_fluxes_ / np.median(fwd_fluxes_)) * 1e6
-        rev_scatter = np.std(rev_fluxes_ / np.median(rev_fluxes_)) * 1e6
-
-        fwd_annotate = f'Forward Scatter: {fwd_scatter:0.0f}ppm'
-        rev_annotate = f'Reverse Scatter: {rev_scatter:0.0f}ppm'
-        info_message(fwd_annotate)
-        info_message(rev_annotate)
-
-        fluxes_normed = fluxes_ / med_flux
-        errors_normed = np.sqrt(fluxes_) / med_flux
-
-        plt.errorbar(self.times[self.idx_fwd],
-                     fluxes_normed[self.idx_fwd],
-                     errors_normed[self.idx_fwd],
-                     fmt='o', color='C0')
-
-        plt.errorbar(self.times[self.idx_rev],
-                     fluxes_normed[self.idx_rev],
-                     errors_normed[self.idx_rev],
-                     fmt='o', color='C3')
-
-        plt.axhline(1.0, ls='--', color='C2')
-        plt.title('WASP-43 HST/UVIS Observation Initial Draft Photometry')
-        plt.xlabel('Time [MJD]')
-        plt.ylabel('Normalized Flux')
-
-        plt.annotate(fwd_annotate,
-                     (0, 0),
-                     xycoords='axes fraction',
-                     xytext=(5, 5),
-                     textcoords='offset points',
-                     ha='left',
-                     va='bottom',
-                     fontsize=12,
-                     color='C0',
-                     weight='bold')
-
-        plt.annotate(rev_annotate,
-                     (0, 0.025),
-                     xycoords='axes fraction',
-                     xytext=(5, 5),
-                     textcoords='offset points',
-                     ha='left',
-                     va='bottom',
-                     fontsize=12,
-                     color='C3',
-                     weight='bold')
-
-        plt.tight_layout()
-        plt.show()
 
     def save_text_file(self, save_filename):
         info_message(f'Saving data to CSV file: {save_filename}')
