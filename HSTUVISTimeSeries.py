@@ -37,11 +37,13 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def center_one_trace(kcol, col, fitter, stddev, y_idx, inds):
+def center_one_trace(kcol, col, fitter, stddev, y_idx, inds, buffer=10):
     model = Gaussian1D(amplitude=col.max(),
                        mean=y_idx, stddev=stddev)
 
-    results = fitter(model, inds, col)
+    y_idx = int(y_idx)
+    idx_narrow = (inds - y_idx) < buffer
+    results = fitter(model, inds[idx_narrow], col[idx_narrow])
     return kcol, results, fitter
 
 
@@ -56,29 +58,29 @@ def fit_one_slopes(kimg, means, fitter, y_idx, slope_guess=2.0 / 466):
     return kimg, results, fitter
 
 
-def cosmic_ray_flag_simple(image_, nSig=5, window=7):
+def cosmic_ray_flag_simple(image_, n_sig=5, window=7):
     cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
     for k, row in enumerate(image_):
         row_Med = np.median(row)
         row_Std = np.std(row)
-        cosmic_rays_[k] += abs(row - row_Med) > nSig * row_Std
+        cosmic_rays_[k] += abs(row - row_Med) > n_sig * row_Std
         image_[k][cosmic_rays_[k]] = row_Med
 
     return image_, cosmic_rays_
 
 
-def cosmic_ray_flag_rolling(image_, nSig=5, window=7):
+def cosmic_ray_flag_rolling(image_, n_sig=5, window=7):
     cosmic_rays_ = np.zeros(image_.shape, dtype=bool)
     for k, row in enumerate(image_):
         row_rMed = pd.Series(row).rolling(window).median()
         row_rStd = pd.Series(row).rolling(window).std()
-        cosmic_rays_[k] += abs(row - row_rMed) > nSig * row_rStd
+        cosmic_rays_[k] += abs(row - row_rMed) > n_sig * row_rStd
         image_[k][cosmic_rays_[k]] = row_rMed[cosmic_rays_[k]]
 
     return image_, cosmic_rays_
 
 
-def aper_table_2_df(aper_phots, n_images):
+def aper_table_2_df(aper_phots, aper_widths, aper_heights, n_images):
     info_message(f'Restructuring Aperture Photometry into DataFrames')
     if len(aper_phots) > 1:
         aper_df = aper_phots[0].to_pandas()
@@ -87,28 +89,36 @@ def aper_table_2_df(aper_phots, n_images):
     else:
         aper_df = aper_phots.to_pandas()
 
-    photometry_df = aper_df.reset_index().drop(['index', 'id'], axis=1)
-
+    photometry_df_ = aper_df.reset_index().drop(['index', 'id'], axis=1)
     mesh_widths, mesh_heights = np.meshgrid(aper_widths, aper_heights)
 
     mesh_widths = mesh_widths.flatten()
     mesh_heights = mesh_heights.flatten()
+    apeture_columns = [colname
+                       for colname in photometry_df_.columns
+                       if 'aperture_sum_' in colname]
 
-    aper_areas = mesh_heights * mesh_widths
-    for colname in photometry_df.columns:
-        if 'aperture_sum_' in colname:
-            aper_id = int(colname.replace('aperture_sum_', ''))
-            aper_widths_ = [mesh_widths[aper_id]] * n_images
-            aper_heights_ = [mesh_heights[aper_id]] * n_images
-            photometry_df[f'aper_width_{aper_id}'] = aper_widths_
-            photometry_df[f'aper_height_{aper_id}'] = aper_heights_
-            photometry_df[f'aper_area_{aper_id}'] = aper_areas[aper_id]
+    photometry_df = pd.DataFrame([])
+    for colname in apeture_columns:
+        aper_id = int(colname.replace('aperture_sum_', ''))
+        aper_width_ = mesh_widths[aper_id].astype(int)
+        aper_height_ = mesh_heights[aper_id].astype(int)
+        newname = f'aperture_sum_{aper_width_}x{aper_height_}'
+
+        photometry_df_[colname]
+        photometry_df[newname] = photometry_df_[colname]
+
+    photometry_df['xcenter'] = photometry_df_['xcenter']
+    photometry_df['ycenter'] = photometry_df_['ycenter']
+
+    return photometry_df
 
 
-def make_mask_cosmic_rays_temporal_simple(val, kcol, krow):
+def make_mask_cosmic_rays_temporal_simple(val, kcol, krow, n_sig=5):
     val_Med = np.median(val)
     val_Std = np.std(val)
-    return kcol, krow, abs(val - val_Med) > nSig * val_Std, val_Med
+    mask = abs(val - val_Med) > n_sig * val_Std
+    return kcol, krow, mask, val_Med
 
 
 class HSTUVISTimeSeries(object):
@@ -122,58 +132,75 @@ class HSTUVISTimeSeries(object):
         self.file_type = file_type
         self.configure_matplotlib()
 
-    def cosmic_ray_flag(self, image_, nSig=5, window=7):
-        return cosmic_ray_flag_simple(image_, nSig=nSig, window=window)
+    def cosmic_ray_flag(self, image_, n_sig=5, window=7):
+        return cosmic_ray_flag_simple(image_, n_sig=n_sig, window=window)
 
-    def clean_cosmic_rays(self, nSig=5, window=7):
+    def clean_cosmic_rays(self, n_sig=5, window=7):
         info_message('Flagging Cosmic Rays using `Temporal Simple` Technique')
-        return self.clean_cosmic_rays_temporal_simple(nSig=nSig, window=window)
+        return self.clean_cosmic_rays_temporal_simple(
+            n_sig=n_sig, window=window)
 
-    def clean_cosmic_rays_temporal_rolling(self, nSig=5, window=7):
+    def clean_cosmic_rays_temporal_rolling(self, n_sig=5, window=7):
         self.cosmic_rays = np.zeros_like(self.image_stack)
         for krow in tqdm(range(self.width)):
             for kcol in range(self.height):
                 val = self.image_stack[:, kcol, krow]
                 val_Med = pd.Series(val).rolling(window).median()
                 val_Std = pd.Series(val).rolling(window).std()
-                mask = abs(val - val_Med) > nSig * val_Std
+                mask = abs(val - val_Med) > n_sig * val_Std
                 self.cosmic_rays[:, kcol, krow] = mask
                 self.image_stack[mask, kcol, krow] = val_Med[mask]
 
-    def clean_cosmic_rays_temporal_simple(self, nSig=5, window=7):
+    def mp_clean_cosmic_rays_temporal_simple(self, n_sig=5, window=7):
+        assert(False), 'Something is broken here'
+        self.cosmic_rays = np.zeros_like(self.image_stack)
+
         n_pixels = self.width * self.height
-        krows, kcols = np.indices((self.height, self.width))
-        pixels = self.image_stack.reshape((n_pixels, self.n_images))
+        kcols, krows = np.indices((self.height, self.width))
+        pixels = []
+        for krow in tqdm(range(self.width)):
+            for kcol in range(self.height):
+                ts_now = self.image_stack[:, krow, kcol]
+                pixels.append([krow, kcol, ts_now])
+
+        # pixels = self.image_stack.reshape((n_pixels, self.n_images))
+
+        partial_mask_cr = partial(make_mask_cosmic_rays_temporal_simple,
+                                  n_sig=n_sig)
+
+        start = time()
         pool = mp.Pool(mp.cpu_count() - 1)
-        masks = pool.starmap(make_mask_cosmic_rays_temporal_simple,
-                             zip(pixels, kcols.flatten(), krows.flatten()))
+        masks = pool.starmap(partial_mask_cr, zip(pixels))
         pool.close()
         pool.join()
+        info_message(f'Cosmic Ray Mask Creation Took {time()-start} seconds')
 
         for kcol, krow, mask, val_Med in tqdm(masks):
             self.cosmic_rays[:, kcol, krow] = mask
             self.image_stack[mask, kcol, krow] = val_Med
 
-    def orig_clean_cosmic_rays_temporal_simple(self, nSig=5, window=7):
+    def clean_cosmic_rays_temporal_simple(self, n_sig=5, window=7):
         self.cosmic_rays = np.zeros_like(self.image_stack)
         krows, kcols = np.indices((self.height, self.width))
-
+        start = time()
         for krow in tqdm(range(self.width)):
             for kcol in range(self.height):
                 val = self.image_stack[:, kcol, krow]
                 val_Med = np.median(val)
                 val_Std = np.std(val)
-                mask = abs(val - val_Med) > nSig * val_Std
+                mask = abs(val - val_Med) > n_sig * val_Std
                 self.cosmic_rays[:, kcol, krow] = mask
                 self.image_stack[mask, kcol, krow] = val_Med
 
-    def clean_cosmic_rays_spatial(self, nSig=5, window=7):
+        info_message(f'Cosmic Ray Mask Creation Took {time()-start} seconds')
+
+    def clean_cosmic_rays_spatial(self, n_sig=5, window=7):
         self.cosmic_rays = np.zeros_like(self.image_stack)
         for k, image_ in tqdm(enumerate(self.image_stack),
                               total=self.n_images):
 
             image_clean_, cosmic_rays_ = self.cosmic_ray_flag(image_,
-                                                              nSig=nSig,
+                                                              n_sig=n_sig,
                                                               window=window)
 
             self.image_stack[k] = image_clean_
@@ -203,14 +230,15 @@ class HSTUVISTimeSeries(object):
 
             pool = mp.Pool(mp.cpu_count() - 1)
             center_traces_ = pool.starmap(partial_center_one_trace, zipper)
-
             pool.close()
             pool.join()
 
-            # center_traces_ = [partial_center_one_trace(
-            #     *entry) for entry in zipper]
+            # center_traces_ = [partial_center_one_trace(*entry)
+            #                   for entry in zipper]
+
             rtime = time() - start
-            info_message(f'Center computing Image {kimg} took {rtime} seconds')
+            info_message(f'Center computing Image {kimg} '
+                         f'took {rtime:0.2f} seconds')
 
             for kcol, results, fitter in center_traces_:
                 self.center_traces[kimg][kcol] = {}
@@ -218,7 +246,7 @@ class HSTUVISTimeSeries(object):
                 self.center_traces[kimg][kcol]['fitter'] = fitter
 
     def fit_trace_slopes(self, stddev=2, notit_verbose=False):
-        info_message('fitting a slope to the Center of the Trace')
+        info_message('Fitting a slope to the Center of the Trace')
         if not hasattr(self, 'center_traces'):
             self.center_all_traces(stddev=stddev, notit_verbose=notit_verbose)
 
@@ -235,7 +263,7 @@ class HSTUVISTimeSeries(object):
         zipper = zip(np.arange(self.n_images),
                      self.gaussian_centers[:, self.x_left_idx:self.x_right_idx])
 
-        slopInts = [partial_fit_slp(*entry) for entry in tqdm(zipper)]
+        slopInts = [partial_fit_slp(*entry) for entry in zipper]
 
         self.image_line_fits = {}
         for kimg, results, fitter in slopInts:
@@ -257,7 +285,7 @@ class HSTUVISTimeSeries(object):
             med_trace = np.median(useful, axis=0) * 0
             ax.plot(useful - med_trace)
 
-    def compute_sky_background(self, positions=None,
+    def compute_sky_background(self, subpixels=5, positions=None,
                                inner_width=None, outer_width=None,
                                inner_height=None, outer_height=None,
                                thetas=None, notit_verbose=False, done_it=False):
@@ -289,7 +317,7 @@ class HSTUVISTimeSeries(object):
             # positions = [[self.width // 2, self.y_idx]] * n_images
             xcenters_ = self.trace_xcenters
             ycenters_ = self.trace_ycenters
-            positions = [xcenters_, ycenters_]
+            positions = np.transpose([xcenters_, ycenters_])
 
         if thetas is None:
             thetas = self.trace_angles
@@ -314,9 +342,11 @@ class HSTUVISTimeSeries(object):
             self.inner_annulars.append(inner_annular)
 
             inner_table = aperture_photometry(image, inner_annular,
-                                              method='subpixel', subpixels=5)
+                                              method='subpixel',
+                                              subpixels=subpixels)
             outer_table = aperture_photometry(image, outer_annular,
-                                              method='subpixel', subpixels=5)
+                                              method='subpixel',
+                                              subpixels=subpixels)
 
             inner_flux = inner_table['aperture_sum'][0]
             outer_flux = outer_table['aperture_sum'][0]
@@ -351,7 +381,7 @@ class HSTUVISTimeSeries(object):
 
         self.sky_bg_columnwise = cw_sky_bgs
 
-    def do_phot(self, positions=None,
+    def do_phot(self, subpixels=5, positions=None,
                 aper_width=None, aper_height=None,
                 thetas=None, notit_verbose=False, done_it=False):
         '''
@@ -415,7 +445,7 @@ class HSTUVISTimeSeries(object):
 
             image_table = aperture_photometry(image, aperture,
                                               method='subpixel',
-                                              subpixels=5)
+                                              subpixels=subpixels)
 
             background = self.sky_bgs[k] * aperture.area
             fluxes_[kimg] = image_table['aperture_sum'][0] - background
@@ -433,9 +463,16 @@ class HSTUVISTimeSeries(object):
         """
 
     def do_multi_phot(self, aper_widths, aper_heights,
-                      positions=None, thetas=None):
-
+                      subpixels=5, positions=None, thetas=None):
         info_message('Beginning Multi-Aperture Photometry')
+        # info_message(
+        #     'Parameters:\n'
+        #     f'AperWidths:{np.min(aper_widths)}-{np.max(aper_widths)}\n'
+        #     f'AperHeights:{np.min(aper_heights)}-{np.max(aper_heights)}\n'
+        #     f'SubPixels:{subpixels}\n'
+        #     f'Positions:{np.median(positions)}\n'
+        #     f'Thetas:{np.median(thetas)}'
+        # )
 
         if positions is None:
             # positions = [[self.width // 2, self.y_idx]] * n_images
@@ -473,23 +510,24 @@ class HSTUVISTimeSeries(object):
 
         info_message('Configuing Photoutils.Aperture_Photometry')
         partial_aper_phot = partial(
-            aperture_photometry, method='subpixel', subpixels=5)
+            aperture_photometry, method='subpixel', subpixels=subpixels)
 
         zipper_ = zip(self.image_stack, self.sky_bgs)
         image_minus_sky_ = [img - sky for img, sky in zipper_]
 
         zipper_ = zip(image_minus_sky_, apertures_stack)
 
+        operation = 'Aperture Photometry per Image'
         # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper_)]
         start = time()
-        info_message('Computing Aperture Photometry per Image')
+        info_message(f'Computing {operation}')
         pool = mp.Pool(mp.cpu_count() - 1)
         aper_phots = pool.starmap(partial_aper_phot, zipper_)
         pool.close()
         pool.join()
 
         rtime = time() - start
-        msg = f'Operation took {rtime} seconds for {n_apertures} apertures.'
+        msg = f'{operation} took {rtime} seconds for {n_apertures} apertures.'
         info_message(msg)
 
         # Store raw output of all photometry to mega-list
@@ -498,14 +536,22 @@ class HSTUVISTimeSeries(object):
         else:
             self.aper_phots = aper_phots
 
+        if hasattr(self, 'apertures_stack'):
+            self.apertures_stack.extend(apertures_stack)
+        else:
+            self.apertures_stack = apertures_stack
+
         # Convert to dataframe
-        photometry_df = aper_table_2_df(aper_phots, self.n_images)
+        photometry_df = aper_table_2_df(
+            aper_phots, np.int32(aper_widths - self.trace_length),
+            np.int32(aper_heights), self.n_images)
 
         # Store new dataframe to object dataframe
         if not hasattr(self, 'photometry_df'):
             self.photometry_df = photometry_df
         else:
             self.photometry_df = pd.concat([self.photometry_df, photometry_df])
+            self.photometry_df.reset_index().drop(['index'], axis=1)
 
     def load_data(self, load_filename=None):
         info_message(f'Loading Fits Files')
@@ -570,7 +616,8 @@ class HSTUVISTimeSeries(object):
 
         # Median Trace configuration as the 'stellar template'
         self.median_trace = np.sum(self.median_image, axis=0)
-        self.y_idx = np.median(self.median_trace.argmax(axis=0)).astype(int)
+        self.y_idx = np.median(self.median_image.argmax(axis=0)).astype(int)
+
         # Set left and right markers at halfway up the trace
         peak_trace = self.median_trace > 0.5 * self.median_trace.max()
         self.x_left_idx = np.where(peak_trace)[0].min()
@@ -610,6 +657,7 @@ class HSTUVISTimeSeries(object):
 
         self.trace_location_calibrated = True
     """
+
     def do_fit(self, init_params=[], static_params={}):
         return
         partial_chisq = partial(chisq, times=self.times,
@@ -621,7 +669,7 @@ class HSTUVISTimeSeries(object):
 
     def batman_wrapper(self, eclipse_depth, static_params):
         return
-    
+
     def chisq(self, params, static_params):
         model = batman_wrapper(params,
                                self.times,
