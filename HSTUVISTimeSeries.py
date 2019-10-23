@@ -15,7 +15,6 @@ from astropy.stats import sigma_clipped_stats
 from astropy.visualization import simple_norm
 from functools import partial
 from glob import glob
-from matplotlib import pyplot as plt
 from photutils import RectangularAperture, RectangularAnnulus
 from photutils import aperture_photometry
 from scipy.interpolate import CubicSpline
@@ -102,18 +101,17 @@ def aper_table_2_df(aper_phots, aper_widths, aper_heights, n_images):
 
     mesh_widths = mesh_widths.flatten()
     mesh_heights = mesh_heights.flatten()
-    apeture_columns = [colname
-                       for colname in photometry_df_.columns
-                       if 'aperture_sum_' in colname]
+    aperture_columns = [colname
+                        for colname in photometry_df_.columns
+                        if 'aperture_sum_' in colname]
 
     photometry_df = pd.DataFrame([])
-    for colname in apeture_columns:
+    for colname in aperture_columns:
         aper_id = int(colname.replace('aperture_sum_', ''))
         aper_width_ = mesh_widths[aper_id].astype(int)
         aper_height_ = mesh_heights[aper_id].astype(int)
         newname = f'aperture_sum_{aper_width_}x{aper_height_}'
 
-        photometry_df_[colname]
         photometry_df[newname] = photometry_df_[colname]
 
     photometry_df['xcenter'] = photometry_df_['xcenter']
@@ -129,6 +127,31 @@ def make_mask_cosmic_rays_temporal_simple(val, kcol, krow, n_sig=5):
     return kcol, krow, mask, val_Med
 
 
+def check_if_column_exists(existing_photometry_df, new_photometry_df, colname):
+    existing_columns = existing_photometry_df.columns
+
+    exists = False
+    similar = False
+    if colname in existing_columns:
+        existing_vec = existing_photometry_df[colname]
+        new_vec = new_photometry_df[colname]
+
+        exists = True
+        similar = np.allclose(existing_vec, new_vec)
+
+        if similar:
+            return exists, similar, colname
+        else:
+            same_name = []
+            for colname in existing_columns:
+                if f'colname_{len(same_name)}' in existing_columns:
+                    same_name.append(colname)
+
+            return exists, similar, f'colname_{len(same_name)}'
+    else:
+        return exists, similar, colname
+
+
 class HSTUVISTimeSeries(object):
 
     def __init__(self, planet_name='planetName', data_dir='./',
@@ -138,7 +161,7 @@ class HSTUVISTimeSeries(object):
         self.data_dir = data_dir
         self.working_dir = working_dir
         self.file_type = file_type
-        self.configure_matplotlib()
+        # self.configure_matplotlib()
 
     def cosmic_ray_flag(self, image_, n_sig=5, window=7):
         return cosmic_ray_flag_simple(image_, n_sig=n_sig, window=window)
@@ -288,13 +311,7 @@ class HSTUVISTimeSeries(object):
 
         self.trace_angles = np.arctan(self.trace_slopes)
 
-        if notit_verbose:
-            useful = gaussian_centers.T[self.x_left_idx:self.x_right_idx]
-            fig, ax = plt.subplots()
-            med_trace = np.median(useful, axis=0) * 0
-            ax.plot(useful - med_trace)
-
-    def compute_sky_background(self, subpixels=5, positions=None,
+    def compute_sky_background(self, subpixels=32, positions=None,
                                inner_width=None, outer_width=None,
                                inner_height=None, outer_height=None,
                                thetas=None, notit_verbose=False, done_it=False):
@@ -323,7 +340,6 @@ class HSTUVISTimeSeries(object):
             outer_height = 350
 
         if positions is None:
-            # positions = [[self.width // 2, self.y_idx]] * n_images
             xcenters_ = self.trace_xcenters
             ycenters_ = self.trace_ycenters
             positions = np.transpose([xcenters_, ycenters_])
@@ -406,7 +422,6 @@ class HSTUVISTimeSeries(object):
         n_images = self.n_images  # convenience for minimizing command lengths
 
         if positions is None:
-            # positions = [[self.width // 2, self.y_idx]] * n_images
             xcenters_ = self.trace_xcenters
             ycenters_ = self.trace_ycenters
             positions = [xcenters_, ycenters_]
@@ -484,7 +499,6 @@ class HSTUVISTimeSeries(object):
         # )
 
         if positions is None:
-            # positions = [[self.width // 2, self.y_idx]] * n_images
             xcenters_ = self.trace_xcenters
             ycenters_ = self.trace_ycenters
             positions = np.transpose([xcenters_, ycenters_])
@@ -559,8 +573,25 @@ class HSTUVISTimeSeries(object):
         if not hasattr(self, 'photometry_df'):
             self.photometry_df = photometry_df
         else:
-            self.photometry_df = pd.concat([self.photometry_df, photometry_df])
-            self.photometry_df.reset_index().drop(['index'], axis=1)
+            # Add all columns from new `photometry_df` to `self.photometry_df`
+            for colname in photometry_df.columns:
+                colname0 = colname  # Store incase changed later
+                exists, similar, colname = check_if_column_exists(
+                    self.photometry_df, photometry_df, colname)
+
+                if exists and similar:
+                    # They are the same vector; skip it
+                    continue
+
+                # add new column to `self.photometry_df`
+                info_message(f'Adding column {colname} to self.photometry_df')
+                self.photometry_df[colname] = photometry_df[colname0]
+
+        # Storing Normalized Photometry
+        med_photometry_df = np.median(photometry_df, axis=0)
+        self.normed_photometry_df = photometry_df / med_photometry_df
+        self.normed_photometry_df['xcenter'] = self.photometry_df['xcenter']
+        self.normed_photometry_df['ycenter'] = self.photometry_df['ycenter']
 
     def load_data(self, load_filename=None):
         info_message(f'Loading Fits Files')
@@ -592,10 +623,10 @@ class HSTUVISTimeSeries(object):
                 errors_stack.append(val['ERR'].data)
                 times.append(np.mean([header['EXPEND'], header['EXPSTART']]))
 
-            times_sort = np.argsort(times)
-            self.times = np.array(times)[times_sort]
-            self.image_stack = np.array(image_stack)[times_sort]
-            self.errors_stack = np.array(errors_stack)[times_sort]
+            # times_sort = np.argsort(times)
+            self.times = np.array(times)  # [times_sort]
+            self.image_stack = np.array(image_stack)  # [times_sort]
+            self.errors_stack = np.array(errors_stack)  # [times_sort]
 
             # self.fits_dict = fits_dict
             self.image_shape = self.image_stack[0].shape
@@ -611,7 +642,7 @@ class HSTUVISTimeSeries(object):
 
             self.simple_fluxes[kimg] = np.sum(image - np.median(image))
 
-    def calibration_trace_location(self, oversample=10,
+    def calibration_trace_location(self, oversample=100,
                                    x_left=450, x_right=900):
         info_message(f'Calibration the Median Trace Location')
 
@@ -628,6 +659,7 @@ class HSTUVISTimeSeries(object):
         self.x_left_idx = np.where(peak_trace)[0].min()
         self.x_right_idx = np.where(peak_trace)[0].max()
 
+        info_message(f'Cubic Spline Interpolating the Median Trace Location')
         cs_trace = CubicSpline(np.arange(self.width), self.median_trace)
         os_xarr = np.linspace(0, self.width, self.width * oversample)
         os_trace = cs_trace(os_xarr)  # oversampled trace
@@ -699,26 +731,27 @@ class HSTUVISTimeSeries(object):
 
         self.idx_rev = np.where(np.bitwise_and(postargs1 == postargs1_rev,
                                                postargs2 == postargs2_rev))[0]
-
+    '''
     def configure_matplotlib(self):
-        get_ipython().magic('config InlineBackend.figure_format = "retina"')
+        # get_ipython().magic('config InlineBackend.figure_format = "retina"')
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", category=FutureWarning)
 
-        self.logger = logging.getLogger("theano.gof.compilelock")
-        self.logger.setLevel(logging.ERROR)
-        self.logger = logging.getLogger("exoplanet")
-        self.logger.setLevel(logging.DEBUG)
+        # self.logger = logging.getLogger("theano.gof.compilelock")
+        # self.logger.setLevel(logging.ERROR)
+        # self.logger = logging.getLogger("exoplanet")
+        # self.logger.setLevel(logging.DEBUG)
 
-        plt.style.use("default")
+        # plt.style.use("default")
         plt.rcParams["savefig.dpi"] = 100
         plt.rcParams["figure.dpi"] = 100
         plt.rcParams["font.size"] = 16
-        plt.rcParams["font.family"] = "sans-serif"
-        plt.rcParams["font.sans-serif"] = ["Liberation Sans"]
-        plt.rcParams["mathtext.fontset"] = "custom"
+        # plt.rcParams["font.family"] = "sans-serif"
+        # plt.rcParams["font.sans-serif"] = ["Liberation Sans"]
+        # plt.rcParams["mathtext.fontset"] = "custom"
+    '''
 
     def save_text_file(self, save_filename):
         info_message(f'Saving data to CSV file: {save_filename}')

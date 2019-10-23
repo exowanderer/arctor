@@ -5,7 +5,17 @@ from matplotlib import pyplot as plt
 from photutils import RectangularAperture
 from tqdm import tqdm
 from statsmodels.robust import scale as sc
+
 import numpy as np
+import pandas as pd
+
+
+def debug_message(message, end='\n'):
+    print(f'[DEBUG] {message}', end=end)
+
+
+def warning_message(message, end='\n'):
+    print(f'[WARNING] {message}', end=end)
 
 
 def info_message(message, end='\n'):
@@ -382,18 +392,97 @@ def plot_errorbars(wasp43, id_=None):
     plt.show()
 
 
-def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=235):
-    photometry_df = wasp43.photometry_df
-    ppm = 1e6
-    meshgrid = np.meshgrid(aper_widths, aper_heights)
+def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
+    # existing_phot_df = WASP43_savedict_backup_221019['photometry_df']
+    # existing_phot_df = wasp43.photometry_df.copy()
 
-    # trace_width = wasp43.x_right - wasp43.x_left
-    # area_grid = (meshgrid[0] + trace_width) * meshgrid[0]
-    # sky_bg = np.array([skbg * area_grid.flatten() for skbg in wasp43.sky_bgs])
-    # - sky_bg
+    aperture_columns = [colname
+                        for colname in existing_phot_df.columns
+                        if 'aperture_sum_' in colname]
+
+    aperwidth_columns = [colname
+                         for colname in existing_phot_df.columns
+                         if 'aper_width_' in colname]
+
+    aperheight_columns = [colname
+                          for colname in existing_phot_df.columns
+                          if 'aper_height_' in colname]
+
+    # Why do i need to add +0.1 ??
+    med_trace_length_ = np.median(trace_lengths) + 0.1
+
+    mesh_widths_ = []
+    for colname in aperwidth_columns:
+        aper_width_ = np.int32(existing_phot_df[colname] - med_trace_length_)
+        mesh_widths_.append(np.median(aper_width_))
+
+    mesh_heights_ = []
+    for colname in aperheight_columns:
+        aper_height_ = np.int32(existing_phot_df[colname])
+        mesh_heights_.append(np.median(aper_height_))
+
+    mesh_widths_ = np.array(mesh_widths_)
+    mesh_heights_ = np.array(mesh_heights_)
+
+    photometry_df = pd.DataFrame([])
+    for colname in aperture_columns:
+        aper_id = int(colname.replace('aperture_sum_', ''))
+        aper_width_ = mesh_widths_[aper_id].astype(int)
+        aper_height_ = mesh_heights_[aper_id].astype(int)
+        newname = f'aperture_sum_{aper_width_}x{aper_height_}'
+
+        photometry_df[newname] = existing_phot_df[colname]
+
+    photometry_df['xcenter'] = existing_phot_df['xcenter']
+    photometry_df['ycenter'] = existing_phot_df['ycenter']
+
+    return photometry_df
+
+
+def plot_2D_stddev(wasp43, signal_max=235):
+    ppm = 1e6
+    photometry_df = wasp43.photometry_df
+
     phot_columns = [colname
                     for colname in photometry_df.columns
                     if 'aperture_sum' in colname]
+
+    new_standard = True
+    for colname in phot_columns:
+        if 'x' not in colname:
+            new_standard = False
+
+    if not new_standard:
+        warning_message(
+            'Converting Photomery Format from '
+            '`aperture_sum_0` to aperture_sum_{width}x{heights}\n'
+            'Run `convert_photometry_df_columns_standard` to make '
+            'this permanent')
+
+        photometry_df = convert_photometry_df_columns_standard(
+            photometry_df, wasp43.trace_lengths)
+        phot_columns = [colname
+                        for colname in photometry_df.columns
+                        if 'aperture_sum' in colname]
+
+    info_message(f'\n{photometry_df}')
+
+    aper_heights = np.zeros(len(phot_columns), dtype=int)
+    aper_widths = np.zeros(len(phot_columns), dtype=int)
+
+    for k, colname in enumerate(phot_columns):
+        example = 'aperture_sum_{width}x{heights}'
+        assert('x' in colname), \
+            f'You need to update your column names as {example}'
+
+        # aperture_sum_{aper_width_}x{aper_height_}
+        vals = colname.split('_')[-1]
+        aper_widths[k], aper_heights[k] = np.int32(vals.split('x'))
+
+    aper_widths = np.unique(aper_widths)
+    aper_heights = np.unique(aper_heights)
+
+    meshgrid = np.meshgrid(aper_widths, aper_heights)
 
     phot_vals = photometry_df[phot_columns].values
     lc_std_rev = phot_vals[wasp43.idx_rev].std(axis=0)
