@@ -588,8 +588,8 @@ class HSTUVISTimeSeries(object):
                 self.photometry_df[colname] = photometry_df[colname0]
 
         # Storing Normalized Photometry
-        med_photometry_df = np.median(photometry_df, axis=0)
-        self.normed_photometry_df = photometry_df / med_photometry_df
+        med_photometry_df = np.median(self.photometry_df, axis=0)
+        self.normed_photometry_df = self.photometry_df / med_photometry_df
         self.normed_photometry_df['xcenter'] = self.photometry_df['xcenter']
         self.normed_photometry_df['ycenter'] = self.photometry_df['ycenter']
 
