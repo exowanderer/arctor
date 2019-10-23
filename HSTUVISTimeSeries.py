@@ -347,17 +347,19 @@ class HSTUVISTimeSeries(object):
         if thetas is None:
             thetas = self.trace_angles
 
-        inner_width = self.trace_length + inner_width
-        outer_width = self.trace_length + outer_width
+        inner_widths = self.trace_lengths + inner_width
+        outer_widths = self.trace_lengths + outer_width
 
         sky_bgs = np.zeros(n_images)
 
         self.outer_annulars = []
         self.inner_annulars = []
 
-        zipper = enumerate(zip(self.image_stack, positions, thetas))
+        zipper = enumerate(zip(self.image_stack, positions, thetas,
+                               inner_widths, outer_widths))
 
-        for k, (image, pos, theta) in tqdm(zipper, total=n_images):
+        iterator = tqdm(zipper, total=n_images)
+        for k, (image, pos, theta, inner_width, outer_width) in iterator:
             outer_annular = RectangularAperture(
                 pos, outer_width, outer_height, theta)
             inner_annular = RectangularAperture(
