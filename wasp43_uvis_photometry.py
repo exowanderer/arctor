@@ -17,12 +17,27 @@ def instantiate_wasp43(planet_name, data_dir, working_dir, file_type):
     joblib_filename = f'{working_dir}/{joblib_filename}'
     if os.path.exists(joblib_filename):
         info_message('Loading Data from Save File')
-        wasp43.load_data()  # joblib_filename
+        wasp43.load_data(joblib_filename)
     else:
         info_message('Loading New Data Object')
         wasp43.load_data()
 
     return wasp43
+
+
+def create_raw_lc_stddev(wasp43):
+    ppm = 1e6
+    phot_vals = wasp43.photometry_df
+    lc_std_rev = phot_vals.iloc[wasp43.idx_rev].std(axis=0)
+    lc_std_fwd = phot_vals.iloc[wasp43.idx_fwd].std(axis=0)
+
+    lc_med_rev = np.median(phot_vals.iloc[wasp43.idx_rev], axis=0)
+    lc_med_fwd = np.median(phot_vals.iloc[wasp43.idx_rev], axis=0)
+
+    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
+    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
+
+    return lc_std / lc_med * ppm
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -78,6 +93,20 @@ if __name__ == '__main__':
     aper_heights = np.arange(min_aper_height, max_aper_height + 2, 5)
 
     wasp43.do_multi_phot(aper_widths, aper_heights)
+
+    snr_lightcurves = create_raw_lc_stddev(wasp43)
+    min_snr_colname = wasp43.photometry_df.columns[snr_lightcurves.argmin()]
+    min_snr_col = wasp43.normed_photometry_df[min_snr_colname]
+    temp = min_snr_colname.split('_')[-1].split('x')
+    min_snr_aper_width, min_snr_aper_height = np.int32(temp)
+
+    fine_buffer = 10
+    fine_aper_widths = np.arange(min_snr_aper_width - fine_buffer,
+                                 min_snr_aper_width + fine_buffer)
+    fine_aper_heights = np.arange(min_snr_aper_height - fine_buffer,
+                                  min_snr_aper_height + fine_buffer)
+
+    wasp43.do_multi_phot(fine_aper_widths, fine_aper_heights)
 
     from plotting import plot_2D_stddev, plot_center_position_vs_scan_and_orbit
     plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=235)
