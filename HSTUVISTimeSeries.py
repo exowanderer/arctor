@@ -406,7 +406,7 @@ class HSTUVISTimeSeries(object):
 
         self.sky_bg_columnwise = cw_sky_bgs
 
-    def do_phot(self, subpixels=5, positions=None,
+    def do_phot(self, subpixels=32, positions=None,
                 aper_width=None, aper_height=None,
                 thetas=None, notit_verbose=False, done_it=False):
         '''
@@ -487,7 +487,7 @@ class HSTUVISTimeSeries(object):
         """
 
     def do_multi_phot(self, aper_widths, aper_heights,
-                      subpixels=5, positions=None, thetas=None):
+                      subpixels=32, positions=None, thetas=None):
         info_message('Beginning Multi-Aperture Photometry')
         # info_message(
         #     'Parameters:\n'
