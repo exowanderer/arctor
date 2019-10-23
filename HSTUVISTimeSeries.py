@@ -24,6 +24,12 @@ from statsmodels.robust import scale as sc
 from time import time
 from tqdm import tqdm
 
+import warnings
+from astropy.utils.exceptions import AstropyWarning
+warnings.simplefilter('ignore', category=AstropyWarning)
+warnings.filterwarnings('ignore', category=UserWarning, append=True)
+warnings.simplefilter('ignore', UserWarning)
+
 
 def debug_message(message, end='\n'):
     print(f'[DEBUG] {message}', end=end)
@@ -37,13 +43,15 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def center_one_trace(kcol, col, fitter, stddev, y_idx, inds, buffer=10):
+def center_one_trace(kcol, col, fitter, stddev, y_idx, inds, idx_buffer=10):
     model = Gaussian1D(amplitude=col.max(),
                        mean=y_idx, stddev=stddev)
 
-    y_idx = int(y_idx)
-    idx_narrow = (inds - y_idx) < buffer
-    results = fitter(model, inds[idx_narrow], col[idx_narrow])
+    # idx_narrow = abs(inds - y_idx) < idx_buffer
+
+    # results = fitter(model, inds[idx_narrow], col[idx_narrow])
+    results = fitter(model, inds, col)
+
     return kcol, results, fitter
 
 
@@ -85,7 +93,7 @@ def aper_table_2_df(aper_phots, aper_widths, aper_heights, n_images):
     if len(aper_phots) > 1:
         aper_df = aper_phots[0].to_pandas()
         for kimg in aper_phots[1:]:
-            aper_df = pd.concat([aper_df, kimg.to_pandas()])
+            aper_df = pd.concat([aper_df, kimg.to_pandas()], ignore_index=True)
     else:
         aper_df = aper_phots.to_pandas()
 
@@ -206,7 +214,7 @@ class HSTUVISTimeSeries(object):
             self.image_stack[k] = image_clean_
             self.cosmic_rays[k] = cosmic_rays_
 
-    def center_all_traces(self, stddev=2, notit_verbose=False):
+    def center_all_traces(self, stddev=2, notit_verbose=False, idx_buffer=10):
         info_message('Computing the Center of the Trace')
         if not hasattr(self, 'height') or not hasattr(self, 'width'):
             self.height, self.width = self.image_shape
@@ -216,7 +224,8 @@ class HSTUVISTimeSeries(object):
                                            fitter=LevMarLSQFitter(),
                                            stddev=stddev,
                                            y_idx=self.y_idx,
-                                           inds=inds)
+                                           inds=inds,
+                                           idx_buffer=idx_buffer)
 
         self.center_traces = {}
         for kimg, image in tqdm(enumerate(self.image_stack),
@@ -228,9 +237,9 @@ class HSTUVISTimeSeries(object):
 
             zipper = zip(np.arange(self.width), image.T)
 
-            pool = mp.Pool(mp.cpu_count() - 1)
-            center_traces_ = pool.starmap(partial_center_one_trace, zipper)
-            pool.close()
+            with mp.Pool(mp.cpu_count() - 1) as pool:
+                center_traces_ = pool.starmap(partial_center_one_trace, zipper)
+            # pool.close()
             pool.join()
 
             # center_traces_ = [partial_center_one_trace(*entry)
@@ -593,11 +602,6 @@ class HSTUVISTimeSeries(object):
             self.n_images = self.image_stack.shape[0]
             self.height, self.width = self.image_shape
 
-            if not hasattr(self, 'trace_location_calibrated'):
-                self.calibration_trace_location()
-                self.identify_trace_direction()
-                self.simple_phots()
-
         info_message(f'Found {self.n_images} {self.file_type} files')
 
     def simple_phots(self):
@@ -607,7 +611,8 @@ class HSTUVISTimeSeries(object):
 
             self.simple_fluxes[kimg] = np.sum(image - np.median(image))
 
-    def calibration_trace_location(self, oversample=100):
+    def calibration_trace_location(self, oversample=10,
+                                   x_left=450, x_right=900):
         info_message(f'Calibration the Median Trace Location')
 
         # Median Argmax
@@ -698,6 +703,7 @@ class HSTUVISTimeSeries(object):
     def configure_matplotlib(self):
         get_ipython().magic('config InlineBackend.figure_format = "retina"')
 
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", category=FutureWarning)
 

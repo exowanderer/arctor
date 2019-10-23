@@ -50,8 +50,11 @@ if __name__ == '__main__':
 
     wasp43 = instantiate_wasp43(planet_name, data_dir, working_dir, file_type)
 
-    if not hasattr(wasp43, 'trace_location_calibrated'):
+    if not hasattr(wasp43, 'gaussian_centers'):
         wasp43.clean_cosmic_rays()
+        wasp43.calibration_trace_location(oversample=10)
+        wasp43.identify_trace_direction()
+        wasp43.simple_phots()
         wasp43.center_all_traces()
         wasp43.fit_trace_slopes()
         wasp43.compute_sky_background()
@@ -61,15 +64,16 @@ if __name__ == '__main__':
     min_aper_width = 1
     max_aper_width = 100
     min_aper_height = 1
-    max_aper_height = 100
+    max_aper_height = 300
 
-    aper_widths = np.arange(min_aper_width, max_aper_width + 1, 5)
-    aper_heights = np.arange(min_aper_height, max_aper_height + 1, 5)
+    aper_widths = np.arange(min_aper_width, max_aper_width + 2, 5)
+    aper_heights = np.arange(min_aper_height, max_aper_height + 2, 5)
 
     wasp43.do_multi_phot(aper_widths, aper_heights)
 
-    from plotting import plot_2D_stddev
-    plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=230)
+    from plotting import plot_2D_stddev, plot_center_position_vs_scan_and_orbit
+    plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=235)
+    plot_center_position_vs_scan_and_orbit(wasp43)
 
     if clargs.plot_verbose:
         wasp43.plot_errorbars()
@@ -80,7 +84,7 @@ if __name__ == '__main__':
 
     if clargs.save_now:
         # csv_filename = f'{clargs.planet_name}_photometry.csv'
-        joblib_filename = f'{planet_name}_savedict.joblib.save'
+        joblib_filename = f'{planet_name}_savedict_NNN.joblib.save'
 
         # csv_filename = f'{working_dir}/{csv_filename}'
         joblib_filename = f'{working_dir}/{joblib_filename}'

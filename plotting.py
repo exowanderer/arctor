@@ -1,5 +1,6 @@
 # https://stackoverflow.com/questions/45786714/custom-marker-edge-style-in-manual-legend
 
+from astropy.visualization import simple_norm
 from matplotlib import pyplot as plt
 from photutils import RectangularAperture
 from tqdm import tqdm
@@ -179,8 +180,8 @@ def plot_center_position_vs_scan_and_orbit(wasp43):
     ylabel = 'Y-Center [pixels]'
 
     uniform_scatter_plot(wasp43,
-                         wasp43.trace_ycenters,
                          wasp43.trace_xcenters,
+                         wasp43.trace_ycenters,
                          arr1_center=0,
                          title=title,
                          xlabel=xlabel,
@@ -301,9 +302,11 @@ def plot_apertures(image, aperture,
     plt.waitforbuttonpress()
 
 
-def plot_trace_peaks(wasp43, image):
+def plot_trace_peaks(wasp43, image_id):
+    image = wasp43.image_stack[image_id]
+    image_shape = image.shape
     gauss_means = np.zeros(image_shape[1])
-    for key, val in wasp43.center_traces.items():
+    for key, val in wasp43.center_traces[image_id].items():
         gauss_means[key] = val['results'].mean.value
 
     norm = simple_norm(image, 'sqrt', percent=99)
@@ -379,7 +382,7 @@ def plot_errorbars(wasp43, id_=None):
     plt.show()
 
 
-def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=500):
+def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=235):
     photometry_df = wasp43.photometry_df
     ppm = 1e6
     meshgrid = np.meshgrid(aper_widths, aper_heights)
@@ -393,15 +396,8 @@ def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=500):
                     if 'aperture_sum' in colname]
 
     phot_vals = photometry_df[phot_columns].values
-    med_phots = np.median(phot_vals, axis=0)
-    phot_vals = phot_vals / med_phots
-
-    # lc_std_rev = phot_vals[wasp43.idx_rev].std(axis=0)
-    # lc_std_fwd = phot_vals[wasp43.idx_fwd].std(axis=0)
-
-    mad2std = 1.4815034297  # integration of ERF into M.A.D.
-    lc_std_rev = sc.mad(phot_vals[wasp43.idx_rev]) * mad2std
-    lc_std_fwd = sc.mad(phot_vals[wasp43.idx_fwd]) * mad2std
+    lc_std_rev = phot_vals[wasp43.idx_rev].std(axis=0)
+    lc_std_fwd = phot_vals[wasp43.idx_fwd].std(axis=0)
 
     lc_med_rev = np.median(phot_vals[wasp43.idx_rev], axis=0)
     lc_med_fwd = np.median(phot_vals[wasp43.idx_rev], axis=0)
@@ -410,7 +406,6 @@ def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=500):
     lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
 
     signal = lc_std / lc_med * ppm
-
     good = signal < signal_max  # ppm
     sig_min, sig_max = np.percentile(signal[good], [0.1, 99.9])
 
@@ -453,4 +448,3 @@ def plot_2D_stddev(wasp43, aper_widths, aper_heights, signal_max=500):
 
     plt.title(
         'Raw Lightcurve Normalized Std-Dev over Height x Width of Aperture', fontsize=20)
-    # plt.tight_layout()
