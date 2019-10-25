@@ -744,7 +744,7 @@ class HSTUVISTimeSeries(object):
 
         self.idx_rev = np.where(np.bitwise_and(postargs1 == postargs1_rev,
                                                postargs2 == postargs2_rev))[0]
-    '''
+
     def configure_matplotlib(self):
         # get_ipython().magic('config InlineBackend.figure_format = "retina"')
 
@@ -752,19 +752,9 @@ class HSTUVISTimeSeries(object):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
         warnings.filterwarnings("ignore", category=FutureWarning)
 
-        # self.logger = logging.getLogger("theano.gof.compilelock")
-        # self.logger.setLevel(logging.ERROR)
-        # self.logger = logging.getLogger("exoplanet")
-        # self.logger.setLevel(logging.DEBUG)
-
-        # plt.style.use("default")
         plt.rcParams["savefig.dpi"] = 100
         plt.rcParams["figure.dpi"] = 100
         plt.rcParams["font.size"] = 16
-        # plt.rcParams["font.family"] = "sans-serif"
-        # plt.rcParams["font.sans-serif"] = ["Liberation Sans"]
-        # plt.rcParams["mathtext.fontset"] = "custom"
-    '''
 
     def save_text_file(self, save_filename):
         info_message(f'Saving data to CSV file: {save_filename}')
