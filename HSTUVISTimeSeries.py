@@ -1,4 +1,4 @@
-import batman
+# import batman
 import joblib
 import logging
 import numpy as np
@@ -537,7 +537,7 @@ class HSTUVISTimeSeries(object):
         partial_aper_phot = partial(
             aperture_photometry, method='subpixel', subpixels=subpixels)
 
-        zipper_ = zip(self.image_stack, self.sky_bgs)
+        zipper_ = zip(self.image_stack, self.sky_bg_columnwise)
         image_minus_sky_ = [img - sky for img, sky in zipper_]
 
         zipper_ = zip(image_minus_sky_, apertures_stack)

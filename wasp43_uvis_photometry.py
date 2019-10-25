@@ -66,22 +66,24 @@ if __name__ == '__main__':
 
     wasp43 = instantiate_wasp43(planet_name, data_dir, working_dir, file_type)
 
-    # if not hasattr(wasp43, 'gaussian_centers'):
-    wasp43.clean_cosmic_rays()
-    wasp43.calibration_trace_location()
-    wasp43.identify_trace_direction()
-    wasp43.simple_phots()
-    wasp43.center_all_traces()
-    wasp43.fit_trace_slopes()
-    wasp43.compute_sky_background(subpixels=32)
-    wasp43.compute_columnwise_sky_background()
+    if not hasattr(wasp43, 'gaussian_centers'):
+        wasp43.clean_cosmic_rays()
+        wasp43.calibration_trace_location()
+        wasp43.identify_trace_direction()
+        wasp43.simple_phots()
+        wasp43.center_all_traces()
+        wasp43.fit_trace_slopes()
+        wasp43.compute_sky_background(subpixels=32)
+        wasp43.compute_columnwise_sky_background()
 
-    info_message('Loading in Best So Far Save File')
-    bestsofar = 'savefiles/WASP43_savedict_backup_221019.joblib.save'
-    newest = 'savefiles/WASP43_savedict_218ppm.joblib.save'
+    running_comparisons = False
+    if running_comparisons:
+        info_message('Loading in Best So Far Save File')
+        bestsofar = 'savefiles/WASP43_savedict_backup_221019.joblib.save'
+        newest = 'savefiles/WASP43_savedict_218ppm.joblib.save'
 
-    WASP43_savedict_backup_221019 = joblib.load(bestsofar)
-    WASP43_savedict_backup_231019 = joblib.load(newest)
+        WASP43_savedict_backup_221019 = joblib.load(bestsofar)
+        WASP43_savedict_backup_231019 = joblib.load(newest)
 
     # Set up the list of aperture widths and heights to search
     min_aper_width = 1
@@ -103,6 +105,7 @@ if __name__ == '__main__':
     fine_buffer = 10
     fine_aper_widths = np.arange(min_snr_aper_width - fine_buffer,
                                  min_snr_aper_width + fine_buffer)
+
     fine_aper_heights = np.arange(min_snr_aper_height - fine_buffer,
                                   min_snr_aper_height + fine_buffer)
 
@@ -120,6 +123,7 @@ if __name__ == '__main__':
                             init_params=[], static_params={})
 
     if clargs.save_now:
+        # joblib_filename = f'{planet_name}_savedict_206ppm_100x100_finescale_columnwiseSkyBG.save'
         # csv_filename = f'{clargs.planet_name}_photometry.csv'
         joblib_filename = f'{planet_name}_savedict_NNN_NNNxNNN.joblib.save'
 
