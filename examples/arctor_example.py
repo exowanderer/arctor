@@ -2,12 +2,12 @@ import joblib
 import numpy as np
 import os
 
-from HSTUVISTimeSeries import HSTUVISTimeSeries
-from HSTUVISTimeSeries import debug_message, warning_message, info_message
+from arctor import Arctor
+from arctor import debug_message, warning_message, info_message
 
 
 def instantiate_arctor(planet_name, data_dir, working_dir, file_type):
-    planet = HSTUVISTimeSeries(
+    planet = Arctor(
         planet_name=planet_name,
         data_dir=data_dir,
         working_dir=working_dir,
