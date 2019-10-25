@@ -632,8 +632,16 @@ class HSTUVISTimeSeries(object):
             self.errors_stack = np.array(errors_stack)  # [times_sort]
 
             # self.fits_dict = fits_dict
-            self.image_shape = self.image_stack[0].shape
-            self.n_images = self.image_stack.shape[0]
+            if hasattr(self, 'image_stack'):
+                image_shape = self.image_stack[0].shape
+                n_images = self.image_stack.shape[0]
+            else:
+                image_shape = 400, 951
+                n_images = 75
+
+            self.image_shape = image_shape
+            self.n_images = n_images
+
             self.height, self.width = self.image_shape
 
         info_message(f'Found {self.n_images} {self.file_type} files')
