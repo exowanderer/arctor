@@ -1,6 +1,5 @@
 # import batman
 import joblib
-import logging
 import numpy as np
 import os
 import pandas as pd
@@ -152,11 +151,11 @@ def check_if_column_exists(existing_photometry_df, new_photometry_df, colname):
         return exists, similar, colname
 
 
-class HSTUVISTimeSeries(object):
+class Arctor(object):
 
     def __init__(self, planet_name='planetName', data_dir='./',
                  working_dir='./', file_type='flt.fits'):
-        info_message('Initializing Instance of the `HSTUVISTimeSeries` Object')
+        info_message('Initializing Instance of the `Arctor` Object')
         self.planet_name = planet_name
         self.data_dir = data_dir
         self.working_dir = working_dir
