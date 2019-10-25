@@ -22,43 +22,43 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def get_flux_idx_from_df(wasp43, aper_width, aper_height):
+def get_flux_idx_from_df(planet, aper_width, aper_height):
     # There *must* be a faster way!
     aperwidth_columns = [colname
-                         for colname in wasp43.photometry_df.columns
+                         for colname in planet.photometry_df.columns
                          if 'aper_width' in colname]
 
     aperheight_columns = [colname
-                          for colname in wasp43.photometry_df.columns
+                          for colname in planet.photometry_df.columns
                           if 'aper_height' in colname]
 
-    trace_length = np.median(wasp43.trace_lengths) - 0.1
+    trace_length = np.median(planet.trace_lengths) - 0.1
 
-    aperwidths_df = (wasp43.photometry_df[aperwidth_columns] - trace_length)
+    aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
     aperwidths_df = aperwidths_df.astype(int)
 
-    aperheight_df = wasp43.photometry_df[aperheight_columns].astype(int)
+    aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
     aperwidth_flag = aperwidths_df.values[0] == aper_width
     aperheight_flag = aperheight_df.values[0] == aper_height
 
     return np.where(aperwidth_flag * aperheight_flag)[0][0]
 
 
-def print_flux_stddev(wasp43, aper_width, aper_height):
+def print_flux_stddev(planet, aper_width, aper_height):
     # There *must* be a faster way!
-    flux_id = get_flux_idx_from_df(wasp43, aper_width, aper_height)
-    fluxes = wasp43.photometry_df[f'aperture_sum_{flux_id}']
+    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
     fluxes = fluxes / np.median(fluxes)
 
     info_message(f'{aper_width}x{aper_height}: {np.std(fluxes)*1e6:0.0f} ppm')
 
 
-def find_flux_stddev(wasp43, flux_std, aper_widths, aper_heights):
+def find_flux_stddev(planet, flux_std, aper_widths, aper_heights):
     # There *must* be a faster way!
     for aper_width in tqdm(aper_widths):
         for aper_height in tqdm(aper_heights):
-            flux_id = get_flux_idx_from_df(wasp43, aper_width, aper_height)
-            fluxes = wasp43.photometry_df[f'aperture_sum_{flux_id}']
+            flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+            fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
             fluxes = fluxes / np.median(fluxes)
 
             if np.std(fluxes) * 1e6 < flux_std:
@@ -66,15 +66,15 @@ def find_flux_stddev(wasp43, flux_std, aper_widths, aper_heights):
                              f'{np.std(fluxes)*1e6:0.0f} ppm')
 
 
-def plot_aperture_edges_with_angle(wasp43, img_id=42):
-    image = wasp43.image_stack[img_id]
-    y_center = wasp43.trace_ycenters[img_id]
-    x_left = wasp43.x_left
-    x_right = wasp43.x_right
+def plot_aperture_edges_with_angle(planet, img_id=42):
+    image = planet.image_stack[img_id]
+    y_center = planet.trace_ycenters[img_id]
+    x_left = planet.x_left
+    x_right = planet.x_right
     trace_width = x_right - x_left
 
-    positions = np.transpose([wasp43.trace_xcenters, wasp43.trace_ycenters])
-    thetas = wasp43.trace_angles
+    positions = np.transpose([planet.trace_xcenters, planet.trace_ycenters])
+    thetas = planet.trace_angles
 
     aper_tilt = RectangularAperture(
         positions[img_id], trace_width, 2, thetas[img_id])
@@ -141,20 +141,20 @@ def plot_aperture_edges_with_angle(wasp43, img_id=42):
     fig.suptitle('Example Aperture With and Without Rotation', fontsize=20)
 
 
-def uniform_scatter_plot(wasp43, arr1, arr2,
+def uniform_scatter_plot(planet, arr1, arr2,
                          arr1_center=0,
                          title='', xlabel='', ylabel=''):
     fig, axs = plt.subplots()
-    time_sort = np.argsort(wasp43.times)
+    time_sort = np.argsort(planet.times)
 
     idx_orbit1 = np.arange(18)  # by eye
     idx_orbit2 = np.arange(18, 38)  # by eye
     idx_eclipse = np.arange(38, 56)  # by eye
     idx_orbit4 = np.arange(56, len(arr1))  # by eye
 
-    plt.scatter(arr1[wasp43.idx_fwd] - arr1_center, arr2[wasp43.idx_fwd],
+    plt.scatter(arr1[planet.idx_fwd] - arr1_center, arr2[planet.idx_fwd],
                 color='C0', label='Forward Scans')
-    plt.scatter(arr1[wasp43.idx_rev] - arr1_center, arr2[wasp43.idx_rev],
+    plt.scatter(arr1[planet.idx_rev] - arr1_center, arr2[planet.idx_rev],
                 color='C1', label='Reverse Scans')
 
     # By hand values from looking at the light curve
@@ -184,51 +184,51 @@ def uniform_scatter_plot(wasp43, arr1, arr2,
     plt.legend(loc=0, fontsize=20)
 
 
-def plot_center_position_vs_scan_and_orbit(wasp43):
+def plot_center_position_vs_scan_and_orbit(planet):
     title = 'Center Positions of the Trace in Forward and Reverse Scanning'
     xlabel = 'X-Center [pixels]'
     ylabel = 'Y-Center [pixels]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.trace_xcenters,
-                         wasp43.trace_ycenters,
+    uniform_scatter_plot(planet,
+                         planet.trace_xcenters,
+                         planet.trace_ycenters,
                          arr1_center=0,
                          title=title,
                          xlabel=xlabel,
                          ylabel=ylabel)
 
 
-def plot_ycenter_vs_time(wasp43):
+def plot_ycenter_vs_time(planet):
     title = 'Y-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Y-Center [pixels]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.times,
-                         wasp43.trace_ycenters,
-                         arr1_center=wasp43.times.mean(),
+    uniform_scatter_plot(planet,
+                         planet.times,
+                         planet.trace_ycenters,
+                         arr1_center=planet.times.mean(),
                          title=title,
                          xlabel=xlabel,
                          ylabel=ylabel)
 
 
-def plot_xcenter_vs_time(wasp43):
+def plot_xcenter_vs_time(planet):
     title = 'X-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'X-Center [pixels]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.times,
-                         wasp43.trace_xcenters,
-                         arr1_center=wasp43.times.mean(),
+    uniform_scatter_plot(planet,
+                         planet.times,
+                         planet.trace_xcenters,
+                         arr1_center=planet.times.mean(),
                          title=title,
                          xlabel=xlabel,
                          ylabel=ylabel)
 
 
-def plot_ycenter_vs_flux(wasp43, aper_width, aper_height):
-    flux_id = get_flux_idx_from_df(wasp43, aper_width, aper_height)
-    fluxes = wasp43.photometry_df[f'aperture_sum_{flux_id}']
+def plot_ycenter_vs_flux(planet, aper_width, aper_height):
+    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
     fluxes = fluxes / np.median(fluxes)
 
     min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
@@ -237,8 +237,8 @@ def plot_ycenter_vs_flux(wasp43, aper_width, aper_height):
     xlabel = 'Y-Center [pixels]'
     ylabel = 'Flux [ppm]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.trace_ycenters,
+    uniform_scatter_plot(planet,
+                         planet.trace_ycenters,
                          fluxes,
                          arr1_center=0,
                          title=title,
@@ -248,9 +248,9 @@ def plot_ycenter_vs_flux(wasp43, aper_width, aper_height):
     plt.ylim(min_flux, max_flux)
 
 
-def plot_xcenter_vs_flux(wasp43, aper_width, aper_height):
-    flux_id = get_flux_idx_from_df(wasp43, aper_width, aper_height)
-    fluxes = wasp43.photometry_df[f'aperture_sum_{flux_id}']
+def plot_xcenter_vs_flux(planet, aper_width, aper_height):
+    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
     fluxes = fluxes / np.median(fluxes)
 
     min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
@@ -259,8 +259,8 @@ def plot_xcenter_vs_flux(wasp43, aper_width, aper_height):
     xlabel = 'X-Center [pixels]'
     ylabel = 'Flux [ppm]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.trace_xcenters,
+    uniform_scatter_plot(planet,
+                         planet.trace_xcenters,
                          fluxes,
                          arr1_center=0,
                          title=title,
@@ -270,10 +270,10 @@ def plot_xcenter_vs_flux(wasp43, aper_width, aper_height):
     plt.ylim(min_flux, max_flux)
 
 
-def plot_lightcurve(wasp43, aper_width, aper_height):
+def plot_lightcurve(planet, aper_width, aper_height):
 
-    flux_id = get_flux_idx_from_df(wasp43, aper_width, aper_height)
-    fluxes = wasp43.photometry_df[f'aperture_sum_{flux_id}']
+    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
     fluxes = fluxes / np.median(fluxes)
 
     min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
@@ -282,10 +282,10 @@ def plot_lightcurve(wasp43, aper_width, aper_height):
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Flux [ppm]'
 
-    uniform_scatter_plot(wasp43,
-                         wasp43.times,
+    uniform_scatter_plot(planet,
+                         planet.times,
                          fluxes,
-                         arr1_center=wasp43.times.mean(),
+                         arr1_center=planet.times.mean(),
                          title=title,
                          xlabel=xlabel,
                          ylabel=ylabel)
@@ -312,11 +312,11 @@ def plot_apertures(image, aperture,
     plt.waitforbuttonpress()
 
 
-def plot_trace_peaks(wasp43, image_id):
-    image = wasp43.image_stack[image_id]
+def plot_trace_peaks(planet, image_id):
+    image = planet.image_stack[image_id]
     image_shape = image.shape
     gauss_means = np.zeros(image_shape[1])
-    for key, val in wasp43.center_traces[image_id].items():
+    for key, val in planet.center_traces[image_id].items():
         gauss_means[key] = val['results'].mean.value
 
     norm = simple_norm(image, 'sqrt', percent=99)
@@ -331,13 +331,13 @@ def plot_trace_peaks(wasp43, image_id):
     plt.waitforbuttonpress()
 
 
-def plot_errorbars(wasp43, id_=None):
+def plot_errorbars(planet, id_=None):
 
-    id_ = list(wasp43.fluxes['apertures'].keys())[0] if id_ is None else id_
+    id_ = list(planet.fluxes['apertures'].keys())[0] if id_ is None else id_
 
-    fluxes_ = wasp43.fluxes['fluxes'][id_]
-    fwd_fluxes_ = fluxes_[wasp43.idx_fwd]
-    rev_fluxes_ = fluxes_[wasp43.idx_rev]
+    fluxes_ = planet.fluxes['fluxes'][id_]
+    fwd_fluxes_ = fluxes_[planet.idx_fwd]
+    rev_fluxes_ = fluxes_[planet.idx_rev]
 
     med_flux = np.median(fluxes_)
     fwd_scatter = np.std(fwd_fluxes_ / np.median(fwd_fluxes_)) * 1e6
@@ -351,14 +351,14 @@ def plot_errorbars(wasp43, id_=None):
     fluxes_normed = fluxes_ / med_flux
     errors_normed = np.sqrt(fluxes_) / med_flux
 
-    plt.errorbar(wasp43.times[wasp43.idx_fwd],
-                 fluxes_normed[wasp43.idx_fwd],
-                 errors_normed[wasp43.idx_fwd],
+    plt.errorbar(planet.times[planet.idx_fwd],
+                 fluxes_normed[planet.idx_fwd],
+                 errors_normed[planet.idx_fwd],
                  fmt='o', color='C0')
 
-    plt.errorbar(wasp43.times[wasp43.idx_rev],
-                 fluxes_normed[wasp43.idx_rev],
-                 errors_normed[wasp43.idx_rev],
+    plt.errorbar(planet.times[planet.idx_rev],
+                 fluxes_normed[planet.idx_rev],
+                 errors_normed[planet.idx_rev],
                  fmt='o', color='C3')
 
     plt.axhline(1.0, ls='--', color='C2')
@@ -393,8 +393,8 @@ def plot_errorbars(wasp43, id_=None):
 
 
 def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
-    # existing_phot_df = WASP43_savedict_backup_221019['photometry_df']
-    # existing_phot_df = wasp43.photometry_df.copy()
+    # existing_phot_df = planet_savedict_backup_221019['photometry_df']
+    # existing_phot_df = planet.photometry_df.copy()
 
     aperture_columns = [colname
                         for colname in existing_phot_df.columns
@@ -439,9 +439,9 @@ def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
     return photometry_df
 
 
-def plot_2D_stddev(wasp43, signal_max=235):
+def plot_2D_stddev(planet, signal_max=235):
     ppm = 1e6
-    photometry_df = wasp43.photometry_df
+    photometry_df = planet.photometry_df
 
     phot_columns = [colname
                     for colname in photometry_df.columns
@@ -460,7 +460,7 @@ def plot_2D_stddev(wasp43, signal_max=235):
             'this permanent')
 
         photometry_df = convert_photometry_df_columns_standard(
-            photometry_df, wasp43.trace_lengths)
+            photometry_df, planet.trace_lengths)
         phot_columns = [colname
                         for colname in photometry_df.columns
                         if 'aperture_sum' in colname]
@@ -485,11 +485,11 @@ def plot_2D_stddev(wasp43, signal_max=235):
     meshgrid = np.meshgrid(aper_widths, aper_heights)
 
     phot_vals = photometry_df[phot_columns].values
-    lc_std_rev = phot_vals[wasp43.idx_rev].std(axis=0)
-    lc_std_fwd = phot_vals[wasp43.idx_fwd].std(axis=0)
+    lc_std_rev = phot_vals[planet.idx_rev].std(axis=0)
+    lc_std_fwd = phot_vals[planet.idx_fwd].std(axis=0)
 
-    lc_med_rev = np.median(phot_vals[wasp43.idx_rev], axis=0)
-    lc_med_fwd = np.median(phot_vals[wasp43.idx_rev], axis=0)
+    lc_med_rev = np.median(phot_vals[planet.idx_rev], axis=0)
+    lc_med_fwd = np.median(phot_vals[planet.idx_rev], axis=0)
 
     lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
     lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
