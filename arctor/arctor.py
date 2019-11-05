@@ -23,8 +23,8 @@ from time import time
 from tqdm import tqdm
 
 from .utils import (
-    instantiate_arctor, create_raw_lc_stddev, center_one_trace,
-    fit_one_slopes, cosmic_ray_flag_simple, cosmic_ray_flag_rolling,
+    center_one_trace,  # instantiate_arctor, create_raw_lc_stddev,
+    fit_one_slopes, cosmic_ray_flag_simple,  # cosmic_ray_flag_rolling,
     aper_table_2_df, make_mask_cosmic_rays_temporal_simple,
     check_if_column_exists)
 
