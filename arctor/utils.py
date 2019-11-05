@@ -29,30 +29,24 @@ def setup_and_plot_GTC(mcmc_fit):
     trace = mcmc_fit['trace']
     map_soln = mcmc_fit['map_soln']
 
+    # map_model = map_soln['light_curves'].flatten()
+    # map_model = map_model + map_soln['mean']
+    # map_model = map_model + map_soln['slope'] * (times - np.median(times))
+
+    # planet.normed_photometry_df[fine_min_snr_colname].values
     if trace is None:
         return
 
     varnames = [key for key in map_soln.keys()
                 if '__' not in key and 'light' not in key]
 
-    print(pm.summary(trace, varnames=varnames)[
-          ['mean', 'sd', 'hpd_2.5', 'hpd_97.5']])
-
     samples = pm.trace_to_dataframe(trace, varnames=varnames)
-    # if 'log_edepth' in samples.columns:
-    #     samples['edepth'] = 10**samples['log_edepth']
-    # else:
-    #     print('\n\n**NO LOG EDEPTH**')
-    #     samples['log_edepth'] = np.log10(samples['edepth'])
 
     figureSize = (20, 20)
     nSig = 3
     paramRanges = [[np.median(samples[colname]) - mad(samples[colname])]
                    for colname in samples.columns]
-    # paramRanges = {'edepth':[0,2e-3]}
 
-    # print(np.mean(samples['edepth'])*1e6, 10**np.mean(samples['log_edepth'])*1e6, np.mean(10**samples['log_edepth'])*1e6)
-    # print(mad(samples['edepth'])*1e6, 10**mad(samples['log_edepth'])*1e6, mad(10**samples['log_edepth'])*1e6)
     pygtc.plotGTC(samples, nContourLevels=3, figureSize='MNRAS_page')
 
 
