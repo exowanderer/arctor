@@ -25,33 +25,58 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def setup_and_plot_GTC(mcmc_fit):
+def setup_and_plot_GTC(mcmc_fit, plotName='None',
+                       varnames=None,
+                       smoothingKernel=1,
+                       square_edepth=False):
+
     trace = mcmc_fit['trace']
     map_soln = mcmc_fit['map_soln']
 
-    # map_model = map_soln['light_curves'].flatten()
-    # map_model = map_model + map_soln['mean']
-    # map_model = map_model + map_soln['slope'] * (times - np.median(times))
-
-    # planet.normed_photometry_df[fine_min_snr_colname].values
     if trace is None:
         return
 
-    varnames = [key for key in map_soln.keys()
-                if '__' not in key and 'light' not in key]
+    if varnames is None:
+        varnames = [key for key in map_soln.keys()
+                    if '__' not in key and 'light' not in key
+                    and 'line' not in key
+                    and 'le_edepth_0' not in key]
 
     samples = pm.trace_to_dataframe(trace, varnames=varnames)
 
-    figureSize = (20, 20)
-    nSig = 3
-    paramRanges = [[np.median(samples[colname]) - mad(samples[colname])]
-                   for colname in samples.columns]
+    # if square_edepth:
+    #     info_message('Converting the `edepth` from `r` to real `edepth`')
+    #     edepth_orig = samples['edepth'].copy()
+    #     positive = edepth_orig > 0
+    #     negative = edepth_orig < 0
+    #     samples['edepth'][positive] = np.sqrt(edepth_orig[positive])
+    #     samples['edepth'][negative] = -np.sqrt(edepth_orig[negative])
+    #     samples['edepth_orig'] = edepth_orig
 
-    pygtc.plotGTC(samples, nContourLevels=3, figureSize='MNRAS_page')
+    #     med_edepth = np.median(samples['edepth'])
+    #     std_edepth = np.std(samples['edepth'])
+    #     sgn_edepth = np.sign(med_edepth)
+    #     map_soln['edepth'] = sgn_edepth * np.sqrt(abs(med_edepth))
+
+    #     med_edepth_orig = np.median(samples['edepth_orig'])
+    #     std_edepth_orig = np.std(samples['edepth_orig'])
+    #     sgn_edepth_orig = np.sign(med_edepth_orig)
+    #     map_soln['edepth_orig'] = med_edepth_orig
+
+    varnames = [key for key in map_soln.keys()
+                if '__' not in key and 'light' not in key
+                and 'line' not in key]
+
+    truths = [float(val) for key, val in map_soln.items() if key in varnames]
+    pygtc.plotGTC(samples, plotName=plotName,  # truths=truths,
+                  smoothingKernel=smoothingKernel,
+                  labelRotation=[True] * 2,
+                  customLabelFont={'rotation': 45},
+                  nContourLevels=3, figureSize='MNRAS_page')
 
 
 def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
-                            idx_fwd, idx_rev,
+                            idx_fwd, idx_rev, random_state=42,
                             xcenters=None, tune=5000, draws=5000,
                             target_accept=0.9, do_mcmc=True,
                             use_log_edepth=False,
@@ -65,7 +90,7 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
 
         if use_log_edepth:
             edepth = pm.Uniform("log_edepth", lower=-20, upper=-2)
-            edepth = pm.Deterministic("period", pm.math.exp(logP))
+            edepth = pm.Deterministic("edepth", pm.math.exp(logP))
             edepth = 10**(0.5 * edepth)
         else:
             if allow_negative_edepths:
@@ -91,25 +116,26 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
         # purposes
         pm.Deterministic("light_curves", light_curves)
 
-        # In this line, we simulate the dataset that we will fit
-        y = xo.eval_in_model(light_curve)
-        y += yerr * np.random.randn(len(y))
+        # # In this line, we simulate the dataset that we will fit
+        # y = xo.eval_in_model(light_curve)
+        # y += yerr * np.random.randn(len(y))
 
         # The likelihood function assuming known Gaussian uncertainty
-        pm.Normal("obs", mu=light_curve, sd=yerr, observed=y)
+        pm.Normal("obs", mu=light_curve, sd=yerr, observed=data)
 
         # Fit for the maximum a posteriori parameters given the simuated
         # dataset
         map_soln = xo.optimize(start=model.test_point)
 
-        np.random.seed(42)
+        np.random.seed(random_state)
 
         trace = pm.sample(
-            tune=3000,
-            draws=3000,
+            tune=tune,
+            draws=draws,
             start=map_soln,
-            chains=4,
-            step=xo.get_dense_nuts_step(target_accept=0.9),
+            chains=mp.cpu_count(),
+            step=xo.get_dense_nuts_step(target_accept=target_accept),
+            cores=mp.cpu_count()
         )
 
     return trace, map_soln
@@ -117,7 +143,8 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
 
 def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
                       xcenters=None, tune=5000, draws=5000, target_accept=0.9,
-                      do_mcmc=True, use_log_edepth=False, allow_negative_edepths=False):
+                      do_mcmc=True, use_log_edepth=False,
+                      allow_negative_edepths=False):
 
     times_bg = times - np.median(times)
     with pm.Model() as model:
@@ -157,9 +184,10 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
         orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
 
         # # Compute the model light curve using starry
-        light_curves_fwd = xo.LimbDarkLightCurve(u).get_light_curve(
+        star = xo.LimbDarkLightCurve(u)
+        light_curves_fwd = star.get_light_curve(
             orbit=orbit, r=edepth, t=times[idx_fwd])
-        light_curves_rev = xo.LimbDarkLightCurve(u).get_light_curve(
+        light_curves_rev = star.get_light_curve(
             orbit=orbit, r=edepth, t=times[idx_rev])
 
         light_curve_fwd = pm.math.sum(light_curves_fwd, axis=-1)
@@ -193,7 +221,7 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
                 draws=tune,
                 start=map_soln,
                 chains=mp.cpu_count(),
-                step=xo.get_dense_nuts_step(target_accept=0.9),
+                step=xo.get_dense_nuts_step(target_accept=target_accept),
                 cores=mp.cpu_count()
             )
         else:
@@ -205,14 +233,7 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
 def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
                      tune=5000, draws=5000, target_accept=0.9, do_mcmc=True,
                      use_log_edepth=False, allow_negative_edepths=False):
-    # b_ = 0.66 # Hellier 2011
-    # period_ = 0.813475  # days # exo.mast.stsci.edu
-    # u_ = [0]
-    # t0_ = t0_guess
-    # edepth_ = np.sqrt(1000/1e6)
 
-    # orbit_ = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
-    # injected_light_curves_ = xo.LimbDarkLightCurve(u).get_light_curve(orbit=orbit, r=edepth, t=times).eval().flatten()
     times_bg = times - np.median(times)
 
     with pm.Model() as model:
@@ -220,8 +241,6 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
         # The baseline flux
         mean = pm.Normal("mean", mu=1.0, sd=1.0)
 
-        # The Kipping (2013) parameterization for quadratic limb darkening paramters
-        # u = xo.distributions.QuadLimbDark("u", testval=np.array([0.3, 0.2]))
         assert(not (allow_negative_edepths and use_log_edepth)),\
             'Cannot have `allow_negative_edepths` with `use_log_edepth`'
 
@@ -279,18 +298,149 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
             line_map_soln = line_map_soln + \
                 map_soln['slope_xcenter'] * xcenters
 
-        # times_sorted = times.argsort()
-        # data_decorr = data.values.flatten() - line_map_soln
-        # plt.errorbar(times[times_sorted].flatten(), data_decorr[times_sorted], yerr[times_sorted].values.flatten(), fmt='o')
-        # plt.errorbar(times[times_sorted].flatten(), data.values.flatten()[times_sorted] - 1.0, yerr[times_sorted].values.flatten(), fmt='o')
-        # plt.plot(times[times_sorted].flatten(), map_soln['light_curves'][times_sorted].flatten())
-        # plt.show()
-
         np.random.seed(42)
         if do_mcmc:
             trace = pm.sample(
                 tune=tune,
                 draws=draws,
+                start=map_soln,
+                chains=mp.cpu_count(),
+                step=xo.get_dense_nuts_step(target_accept=target_accept),
+                cores=mp.cpu_count()
+            )
+        else:
+            trace = None
+
+    return trace, map_soln
+
+
+def run_pymc3_both(times, data, yerr, t0, u, period, b,
+                   xcenters=None, ycenters=None,
+                   trace_angles=None, trace_lengths=None,
+                   idx_fwd=None, idx_rev=None, tune=5000, draws=5000,
+                   target_accept=0.9, do_mcmc=True, use_log_edepth=False,
+                   allow_negative_edepths=False):
+
+    if idx_fwd is None or idx_rev is None:
+        # Make use of idx_fwd and idx_rev trivial
+        idx_fwd = np.ones_like(times, dtype=bool)
+
+        strfwd = ''
+        strrev = ''
+    else:
+        assert(len(idx_fwd) + len(idx_rev) == len(times)),\
+            f"`idx_fwd` + `idx_rev` must include all idx from `times`"
+
+        strfwd = '_fwd'
+        strrev = '_rev'
+
+    times_bg = times - np.median(times)
+    with pm.Model() as model:
+
+        # The baseline flux
+        mean_fwd = pm.Normal(f"mean{strfwd}", mu=1.0, sd=1.0)
+
+        if idx_rev is not None:
+            mean_rev = pm.Normal(f"mean{strrev}", mu=1.0, sd=1.0)
+
+        assert(not (allow_negative_edepths and use_log_edepth)),\
+            'Cannot have `allow_negative_edepths` with `use_log_edepth`'
+
+        if use_log_edepth:
+            log_edepth = pm.Uniform("log_edepth", lower=-20, upper=-2)
+            edepth = pm.Deterministic("edepth", 10**(0.5 * log_edepth))
+        else:
+            if allow_negative_edepths:
+                edepth = pm.Uniform("edepth", lower=-0.01, upper=0.01)
+                # pm.Deterministic('lt_edepth_0', pm.math.lt(edepth, 0.0))
+                # if pm.math.lt(edepth, 0.0):
+                #     edepth = -np.sqrt(abs(edepth))
+                # else:
+                #     edepth = np.sqrt(edepth)
+            else:
+                edepth = pm.Uniform("edepth", lower=0, upper=0.01)
+                edepth = pm.math.sqrt(edepth)
+
+        slope = pm.Uniform("slope", lower=-1, upper=1)
+        line_fwd = mean_fwd + slope * times_bg[idx_fwd]
+
+        if idx_rev is not None:
+            line_rev = mean_rev + slope * times_bg[idx_rev]
+
+        if xcenters is not None:
+            slope_xc = pm.Uniform("slope_xcenter", lower=-1, upper=1)
+            line_fwd = line_fwd + slope_xc * xcenters[idx_fwd]
+            if idx_rev is not None:
+                line_rev = line_rev + slope_xc * xcenters[idx_rev]
+
+        if ycenters is not None:
+            slope_yc = pm.Uniform("slope_ycenter", lower=-1, upper=1)
+            line_fwd = line_fwd + slope_yc * ycenters[idx_fwd]
+            if idx_rev is not None:
+                line_rev = line_rev + slope_yc * ycenters[idx_rev]
+
+        if trace_angles is not None:
+            slope_ta = pm.Uniform("slope_trace_angle", lower=-1, upper=1)
+            line_fwd = line_fwd + slope_ta * trace_angles[idx_fwd]
+            if idx_rev is not None:
+                line_rev = line_rev + slope_ta * trace_angles[idx_rev]
+
+        if trace_lengths is not None:
+            slope_tl = pm.Uniform("slope_trace_length", lower=-1, upper=1)
+            line_fwd = line_fwd + slope_tl * trace_lengths[idx_fwd]
+            if idx_rev is not None:
+                line_rev = line_rev + slope_tl * trace_lengths[idx_rev]
+
+        pm.Deterministic(f'line_model{strfwd}', line_fwd)
+        if idx_rev is not None:
+            pm.Deterministic(f'line_model{strrev}', line_rev)
+
+        # Set up a Keplerian orbit for the planets
+        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
+
+        # # Compute the model light curve using starry
+        star = xo.LimbDarkLightCurve(u)
+        light_curves_fwd = star.get_light_curve(
+            orbit=orbit, r=edepth, t=times[idx_fwd])
+
+        if idx_rev is not None:
+            light_curves_rev = star.get_light_curve(
+                orbit=orbit, r=edepth, t=times[idx_rev])
+
+        light_curve_fwd = pm.math.sum(light_curves_fwd, axis=-1)
+
+        if idx_rev is not None:
+            light_curve_rev = pm.math.sum(light_curves_rev, axis=-1)
+
+        # # Here we track the value of the model light curve for plotting
+        # # purposes
+        pm.Deterministic(f"light_curves{strfwd}", light_curves_fwd)
+        if idx_rev is not None:
+            pm.Deterministic(f"light_curves{strrev}", light_curves_rev)
+
+        # # The likelihood function assuming known Gaussian uncertainty
+        pm.Normal(f"obs{strfwd}", mu=light_curve_fwd + line_fwd,
+                  sd=yerr[idx_fwd], observed=data[idx_fwd])
+
+        if idx_rev is not None:
+            pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
+                      sd=yerr[idx_rev], observed=data[idx_rev])
+
+        # Fit for the maximum a posteriori parameters
+        #   given the simuated dataset
+        map_soln = xo.optimize(start=model.test_point)
+        if use_log_edepth:
+            map_soln_edepth = 10**map_soln["log_edepth"]
+        else:
+            map_soln_edepth = map_soln["edepth"]
+
+        info_message(f'Map Soln Edepth:{map_soln_edepth*1e6}')
+
+        np.random.seed(42)
+        if do_mcmc:
+            trace = pm.sample(
+                tune=tune,
+                draws=tune,
                 start=map_soln,
                 chains=mp.cpu_count(),
                 step=xo.get_dense_nuts_step(target_accept=target_accept),
@@ -629,7 +779,9 @@ def check_if_column_exists(existing_photometry_df, new_photometry_df, colname):
 
 
 def run_all_12_options(times, flux, uncs,
-                       list_of_aper_columns, xcenters,
+                       list_of_aper_columns,
+                       xcenters=None, ycenters=None,
+                       trace_angles=None, trace_lengths=None,
                        t0=0, u=[0], period=1.0, b=0.0,
                        idx_fwd=None, idx_rev=None,
                        tune=3000, draws=3000, target_accept=0.9,
@@ -637,11 +789,9 @@ def run_all_12_options(times, flux, uncs,
                        injected_light_curve=1.0, working_dir='./',
                        base_name='WASP43_fine_grain_photometry_208ppm'):
 
-    plt.rcParams['figure.figsize'] = (10, 6)
-
-    xcenter_options = [None, None, None, None, None, None,
-                       xcenters, xcenters, xcenters,
-                       xcenters, xcenters, xcenters]
+    decor_set = [xcenters, ycenters, trace_angles, trace_lengths]
+    decor_options = [None, None, None, None,
+                     None, None].extend([decor_set] * 6)
 
     neg_ecl_options = [True, True, True, True,
                        False, False, False, False,
@@ -655,28 +805,39 @@ def run_all_12_options(times, flux, uncs,
                           False, False, False, False,
                           True, True, True, True]
 
-    pymc3_options = zip(xcenter_options, neg_ecl_options,
+    pymc3_options = zip(decor_options, neg_ecl_options,
                         use_split_options, log_edepth_options)
 
     mcmc_fits = {}
 
     start0 = time()
-    for xcenters_, allow_neg_, use_split_, use_log_edepth_ in pymc3_options:
+    for decor_set_, allow_neg_, use_split_, use_log_edepth_ in pymc3_options:
         start1 = time()
         print(f'Fit xCenters: {xcenters_ is None}')
         print(f'Allow Negative Eclipse Depth: {allow_neg_}')
         print(f'Use Fwd/Rev Split: {use_split_}')
         print(f'Use Log Edepth: {use_log_edepth_}')
 
-        fine_grain_mcmcs, filename = run_multiple_pymc3(
+        if decor_set_ is not None:
+            xcenters_, ycenters_, trace_angles_, trace_lengths_ = decor_set_
+        else:
+            xcenters_, ycenters_, trace_angles_, trace_lengths_ = [None] * 4
+
+        idx_fwd_ = idx_fwd if use_split_ else None
+        idx_rev_ = idx_rev if use_split_ else None
+
+        fine_grain_mcmcs, filename = run_pymc3_both(
             times, flux, uncs, list_of_aper_columns,
             t0=t0, u=u, period=period, b=b,
-            idx_fwd=idx_fwd, idx_rev=idx_rev,
+            idx_fwd=idx_fwd_, idx_rev=idx_rev_,
             tune=tune, draws=draws, target_accept=target_accept,
             do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
             injected_light_curve=injected_light_curve,
             base_name=base_name, working_dir=working_dir,
             xcenters=xcenters_,
+            ycenters=ycenters_,
+            trace_angles=trace_angles_,
+            trace_lengths=trace_lengths_,
             allow_negative_edepths=allow_neg_,
             use_rev_fwd_split=use_split_,
             use_log_edepth=use_log_edepth_
@@ -686,7 +847,7 @@ def run_all_12_options(times, flux, uncs,
 
         del fine_grain_mcmcs, filename
 
-    n_mcmcs = len(xcenter_options)
+    n_mcmcs = len(decor_options)
     full_time = (time() - start0) / 60
     print(f'[INFO] All {n_mcmcs} MCMCs took {full_time:0.2f} minutes')
 
@@ -702,7 +863,6 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
                              injected_light_curve=1.0,
                              base_name='WASP43_fine_grain_photometry_208ppm'):
 
-    plt.rcParams['figure.figsize'] = (10, 6)
     base_name = f'{base_name}_near_best_{n_space}x{n_space}'
 
     start0 = time()
@@ -990,3 +1150,66 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
             fine_grain_mcmcs_with_w_xcenter_log_edepth_no_split,
             fine_grain_mcmcs_with_w_xcenter_log_edepth_w_split
             ]
+
+from astropy.modeling.models import Planar2D, Linear1D
+from astropy.modeling.fitting import LinearLSQFitter
+from matplotlib import pyplot as plt
+
+
+def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
+                         n_sig=5, label=None):
+
+    inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
+                      ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
+
+    fitter_o = LinearLSQFitter()
+    fitter_t = LinearLSQFitter()
+
+    model_o = Linear1D(slope=1e-6, intercept=np.median(flux))
+    model_t = Linear1D(slope=-1e-3, intercept=0)
+
+    fit_t = fitter_t(model_t, times[inliers] - np.median(times[inliers]),
+                     flux[inliers])
+    fit_o = fitter_o(model_o, other[inliers] - np.median(other[inliers]),
+                     flux[inliers] - fit_t(times[inliers] - np.median(times)))
+
+    model_comb = Planar2D(slope_x=fit_o.slope,
+                          slope_y=fit_t.slope,
+                          intercept=fit_t.intercept)
+
+    fit_comb = fitter_t(model_comb,
+                        other[inliers] - np.median(other[inliers]),
+                        times[inliers] - np.median(times[inliers]),
+                        flux[inliers])
+
+    annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
+                  f't_slope:{fit_t.slope.value:0.2e}\n'
+                  f'c_slope_o:{fit_comb.slope_x.value:0.2e}\n'
+                  f'c_slope_t:{fit_comb.slope_y.value:0.2e}\n'
+                  f'o_intcpt:{fit_o.intercept.value:0.2e}\n'
+                  f't_intcpt:{fit_t.intercept.value:0.2e}\n'
+                  f'c_intcpt:{fit_comb.intercept.value:0.2e}'
+                  )
+
+    min_y = other.min()
+    max_y = other.max()
+    min_t = times.min() - np.median(times)
+    max_t = times.max() - np.median(times)
+    plt.plot(other[idx_fwd], flux[idx_fwd], 'o')
+    plt.plot(other[idx_rev], flux[idx_rev], 'o')
+    plt.plot(other[~inliers], flux[~inliers], 'ro',
+             ms=15, mew=1, mec='r', color='None')
+
+    other_th = np.linspace(min_y, max_y, 100)
+    times_th = np.linspace(min_t, max_t, 100)
+    plt.plot(other_th, fit_comb(other_th - np.median(other), times_th))
+    plt.title(label)
+    plt.annotate(annotation,
+                 (0, 0),
+                 xycoords="axes fraction",
+                 xytext=(15, 15),
+                 textcoords="offset points",
+                 ha="left",
+                 va="bottom",
+                 fontsize=12,
+                 )
