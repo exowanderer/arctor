@@ -128,13 +128,18 @@ plt.scatter((decor_aper_widths_only + 0.25 * use_xcenters)[~use_xcenters],
 
 plt.legend(loc=0)
 
+
+fig, axs = plt.subplots(nrows=4, ncols=8)
 n_options = len(decor_aper_widths_only)
+counter = 0
 for idx_split_ in [True, False]:
     for use_xcenters_ in [True, False]:
         for use_ycenters_ in [True, False]:
             for use_trace_angles_ in [True, False]:
                 for use_trace_lengths_ in [True, False]:
-                    plt.figure()
+                    ax = axs.flatten()[counter]
+                    counter = counter + 1
+
                     sub_sect = np.ones(n_options).astype(bool)
                     _idx_split = idx_split == idx_split_
                     _use_xcenters = use_xcenters == use_xcenters_
@@ -148,11 +153,14 @@ for idx_split_ in [True, False]:
                     sub_sect = np.bitwise_and(sub_sect, _use_trace_angles)
                     sub_sect = np.bitwise_and(sub_sect, _use_tracelengths)
 
+                    best_res_std_ppm = res_std_ppm[sub_sect].min()
+                    print('')
+
                     aper_widths_ = decor_aper_widths_only[sub_sect]
                     aper_heights_ = decor_aper_heights_only[sub_sect]
-                    plt.scatter(aper_widths_, aper_heights_,
-                                c=res_std_ppm[sub_sect],
-                                marker='s', s=10000)
+                    ax.scatter(aper_widths_, aper_heights_,
+                               c=res_std_ppm[sub_sect],
+                               marker='s', s=10000)
 
                     argbest_ppm = res_std_ppm[sub_sect].argmin()
                     best_ppm = res_std_ppm[argbest_ppm]
@@ -160,16 +168,41 @@ for idx_split_ in [True, False]:
                     height_best = aper_heights_[argbest_ppm]
 
                     txt = f'{best_ppm:.0f} ppm [{width_best}x{height_best}]'
-                    plt.plot(width_best, height_best, 'o', color='C1', ms=10)
-                    plt.annotate(txt,
-                                 (width_best + 0.1, height_best + 0.1),
-                                 # xycoords='axes fraction',
-                                 xytext=(width_best + 0.1, height_best + 0.1),
-                                 # textcoords='offset points',
-                                 ha='left',
-                                 va='bottom',
-                                 fontsize=12,
-                                 color='C1',
-                                 weight='bold')
+                    out = ax.plot(width_best, height_best, 'o',
+                                  color='C1', ms=10)
+                    ax.annotate(txt,
+                                (width_best + 0.1, height_best + 0.1),
+                                # xycoords='axes fraction',
+                                xytext=(width_best + 0.1, height_best + 0.1),
+                                # textcoords='offset points',
+                                ha='left',
+                                va='bottom',
+                                fontsize=12,
+                                color='C1',
+                                weight='bold')
 
-                    plt.colorbar()
+                    title = (f'idx_split: {idx_split_} '
+                             f'_use_xcenters: {use_xcenters_} '
+                             f'_use_ycenters: {use_ycenters_} '
+                             f'_use_trace_angles: {use_trace_angles_} '
+                             f'_use_trace_lengths :{use_trace_lengths_} ')
+                    best_res_std_ppm = res_std_ppm[sub_sect].min()
+                    title = f'{title} : {best_res_std_ppm}'
+                    print(title)
+                    ax.set_title(title)
+                    # plt.colorbar(out)
+
+sub_sect = np.ones(n_options).astype(bool)
+_idx_split = idx_split == False
+_use_xcenters = use_xcenters == True
+_use_ycenters = use_ycenters == True
+_use_trace_angles = use_trace_angles == True
+_use_tracelengths = use_trace_lengths == True
+
+sub_sect = np.bitwise_and(sub_sect, _idx_split)
+sub_sect = np.bitwise_and(sub_sect, _use_xcenters)
+sub_sect = np.bitwise_and(sub_sect, _use_ycenters)
+sub_sect = np.bitwise_and(sub_sect, _use_trace_angles)
+sub_sect = np.bitwise_and(sub_sect, _use_tracelengths)
+
+print(res_std_ppm[sub_sect].min())
