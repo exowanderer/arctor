@@ -137,11 +137,12 @@ def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
 
     correction = 2 * n_params * (n_params + 1) / (n_pts - n_params - 1)
 
+    sdnr_ = np.std(map_model - phots)
     chisq_ = np.sum((map_model - phots)**2 / uncs**2)
     aic_ = chisq_ + 2 * n_params + correction
     bic_ = chisq_ + n_params * np.log10(n_pts)
 
-    return chisq_, aic_, bic_
+    return chisq_, aic_, bic_, sdnr_
 
 
 def extract_map_only_data(planet, idx_fwd, idx_rev,
@@ -166,6 +167,7 @@ def extract_map_only_data(planet, idx_fwd, idx_rev,
     use_trace_angles = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
     use_trace_lengths = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
 
+    sdnr_apers = np.zeros(len(decor_span_MAPs_only_list))
     chisq_apers = np.zeros(len(decor_span_MAPs_only_list))
     aic_apers = np.zeros(len(decor_span_MAPs_only_list))
     bic_apers = np.zeros(len(decor_span_MAPs_only_list))
@@ -199,21 +201,25 @@ def extract_map_only_data(planet, idx_fwd, idx_rev,
         fine_grain_mcmcs_s[key] = fine_grain_mcmcs_
         map_solns[key] = map_soln_
 
-        chisq_, aic_, bic_ = compute_chisq_aic(planet, aper_column, map_soln_,
-                                               idx_fwd, idx_rev,
-                                               idx_split[k],
-                                               use_xcenters[k],
-                                               use_ycenters[k],
-                                               use_trace_angles[k],
-                                               use_trace_lengths[k])
-
+        chisq_, aic_, bic_, sdnr_ = compute_chisq_aic(planet,
+                                                      aper_column,
+                                                      map_soln_,
+                                                      idx_fwd,
+                                                      idx_rev,
+                                                      idx_split[k],
+                                                      use_xcenters[k],
+                                                      use_ycenters[k],
+                                                      use_trace_angles[k],
+                                                      use_trace_lengths[k])
+        sdnr_apers[k] = sdnr_
         chisq_apers[k] = chisq_
         aic_apers[k] = aic_
         bic_apers[k] = bic_
 
     return (idx_split, use_xcenters, use_ycenters, use_trace_angles,
-            use_trace_lengths, fine_grain_mcmcs_s, map_solns, res_std_ppm,
-            phots_std_ppm, res_diff_ppm, chisq_apers, aic_apers, bic_apers)
+            use_trace_lengths, fine_grain_mcmcs_s, map_solns,
+            res_std_ppm, phots_std_ppm, res_diff_ppm,
+            sdnr_apers, chisq_apers, aic_apers, bic_apers)
 
 
 def plot_aper_width_grid():
@@ -246,11 +252,21 @@ def plot_aper_width_grid():
 def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                                use_ycenters, use_trace_angles,
                                use_trace_lengths, res_std_ppm,
-                               chisq_apers, aic_apers, bic_apers,
+                               sdnr_apers, chisq_apers, aic_apers, bic_apers,
                                decor_aper_widths_only, decor_aper_heights_only,
                                idx_split_, use_xcenters_, use_ycenters_,
                                use_trace_angles_, use_trace_lengths_,
-                               one_fig=False, fig=None, hspace=0.5):
+                               focus='aic', one_fig=False, fig=None,
+                               hspace=0.5):
+
+    foci = {}
+    foci['std'] = res_std_ppm
+    foci['aic'] = aic_apers
+    foci['bic'] = bic_apers
+    foci['chisq'] = chisq_apers
+    foci['sdnr'] = sdnr_apers
+
+    focus_ = foci[focus]
 
     sub_sect = create_sub_sect(n_options,
                                idx_split,
@@ -271,12 +287,12 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
     aper_widths_ = decor_aper_widths_only[sub_sect]
     aper_heights_ = decor_aper_heights_only[sub_sect]
     out = ax.scatter(aper_widths_, aper_heights_,
-                     c=aic_apers[sub_sect],
+                     c=focus_[sub_sect],
                      marker='s', s=200)
 
-    min_aic_sub = aic_apers[sub_sect].min()
-    argmin_aic_sub = aic_apers[sub_sect].argmin()
-    manual_argmin = np.where(aic_apers[sub_sect] == min_aic_sub)[0][0]
+    min_aic_sub = focus_[sub_sect].min()
+    argmin_aic_sub = focus_[sub_sect].argmin()
+    manual_argmin = np.where(focus_[sub_sect] == min_aic_sub)[0][0]
     assert(manual_argmin == argmin_aic_sub), \
         f'{manual_argmin}, {argmin_aic_sub}'
 
@@ -330,7 +346,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                 color='black',
                 weight='bold')
 
-    title = f'AIC: {np.int(np.round(min_aic_sub)):0.0f}'
+    title = f'{focus.upper()}: {np.int(np.round(min_aic_sub)):0.0f}'
     ax.set_title(title)
 
     if one_fig:
@@ -348,7 +364,8 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
 def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
                                    use_ycenters, use_trace_angles,
                                    use_trace_lengths, res_std_ppm,
-                                   chisq_apers, aic_apers, bic_apers,
+                                   sdnr_apers, chisq_apers,
+                                   aic_apers, bic_apers,
                                    decor_aper_widths_only,
                                    decor_aper_heights_only,
                                    idx_split_, use_xcenters_, use_ycenters_,
@@ -372,11 +389,13 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
     argbest_ppm = res_std_ppm[sub_sect].argmin()
 
     best_ppm_sub = res_std_ppm[sub_sect][argbest_ppm]
+    best_sdnr_sub = sdnr_apers[sub_sect][argbest_ppm]
     best_chisq_sub = chisq_apers[sub_sect][argbest_ppm]
     best_aic_sub = aic_apers[sub_sect][argbest_ppm]
     width_best = aper_widths_sub[argbest_ppm]
     height_best = aper_heights_sub[argbest_ppm]
 
+    sdnr_res_sub_min = sdnr_apers[sub_sect].min()
     std_res_sub_min = res_std_ppm[sub_sect].min()
     chisq_sub_min = chisq_apers[sub_sect].min()
     aic_sub_min = aic_apers[sub_sect].min()
@@ -389,9 +408,11 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
               f'width_best': width_best,
               f'height_best': height_best,
               f'best_ppm_sub': best_ppm_sub,
+              f'best_sdnr_sub': best_sdnr_sub,
               f'best_chisq_sub': best_chisq_sub,
               f'best_aic_sub': best_aic_sub,
               f'std_res_sub_min': std_res_sub_min,
+              f'sdnr_res_sub_min': sdnr_res_sub_min,
               f'chisq_sub_min': chisq_sub_min,
               f'aic_sub_min': aic_sub_min}
 
@@ -399,8 +420,9 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
 
 
 def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
-                      res_std_ppm, chisq_apers, aic_apers, bic_apers,
-                      idx_split, use_xcenters, use_ycenters,
+                      res_std_ppm, sdnr_apers, chisq_apers,
+                      aic_apers, bic_apers, idx_split,
+                      use_xcenters, use_ycenters,
                       use_trace_angles, use_trace_lengths):
 
     n_options = len(decor_aper_widths_only)
@@ -413,7 +435,7 @@ def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
                         entry = organize_results_ppm_chisq_aic(
                             n_options, idx_split, use_xcenters, use_ycenters,
                             use_trace_angles, use_trace_lengths, res_std_ppm,
-                            chisq_apers, aic_apers, bic_apers,
+                            sdnr_apers, chisq_apers, aic_apers, bic_apers,
                             decor_aper_widths_only, decor_aper_heights_only,
                             idx_split_, use_xcenters_, use_ycenters_,
                             use_trace_angles_, use_trace_lengths_)
@@ -429,11 +451,12 @@ def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
 
 def plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                       decor_aper_heights_only,
-                                      res_std_ppm, chisq_apers,
+                                      res_std_ppm, sdnr_apers, chisq_apers,
                                       aic_apers, bic_apers,
                                       idx_split, use_xcenters,
                                       use_ycenters, use_trace_angles,
-                                      use_trace_lengths, one_fig=False):
+                                      use_trace_lengths, focus='aic',
+                                      one_fig=False):
 
     if one_fig:
         fig, axs = plt.subplots(nrows=4, ncols=8)
@@ -458,6 +481,7 @@ def plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                                    use_trace_angles,
                                                    use_trace_lengths,
                                                    res_std_ppm,
+                                                   sdnr_apers,
                                                    chisq_apers,
                                                    aic_apers,
                                                    bic_apers,
@@ -468,6 +492,7 @@ def plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                                    use_ycenters_,
                                                    use_trace_angles_,
                                                    use_trace_lengths_,
+                                                   focus=focus,
                                                    one_fig=one_fig)
 
 if __name__ == '__main__':
@@ -528,8 +553,8 @@ if __name__ == '__main__':
 
     idx_split, use_xcenters, use_ycenters, use_trace_angles, \
         use_trace_lengths, fine_grain_mcmcs_s, map_solns, res_std_ppm, \
-        phots_std_ppm, res_diff_ppm, chisq_apers, aic_apers, bic_apers \
-        = extract_map_only_data(planet, idx_fwd, idx_rev)
+        phots_std_ppm, res_diff_ppm, sdnr_apers, chisq_apers,\
+        aic_apers, bic_apers = extract_map_only_data(planet, idx_fwd, idx_rev)
 
     filename = 'decor_span_MAPs_only_aper_columns_list.joblib.save'
     filename = os.path.join('notebooks', filename)
@@ -546,6 +571,7 @@ if __name__ == '__main__':
     decor_results_df = create_results_df(decor_aper_widths_only,
                                          decor_aper_heights_only,
                                          res_std_ppm,
+                                         sdnr_apers,
                                          chisq_apers,
                                          aic_apers,
                                          bic_apers,
@@ -558,6 +584,7 @@ if __name__ == '__main__':
     plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                       decor_aper_heights_only,
                                       res_std_ppm,
+                                      sdnr_apers,
                                       chisq_apers,
                                       aic_apers,
                                       bic_apers,
@@ -566,4 +593,5 @@ if __name__ == '__main__':
                                       ~use_ycenters,
                                       ~use_trace_angles,
                                       ~use_trace_lengths,
-                                      one_fig=True)
+                                      one_fig=True,
+                                      focus='aic')
