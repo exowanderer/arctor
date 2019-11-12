@@ -113,6 +113,7 @@ def create_sub_sect(n_options, idx_split, use_xcenters, use_ycenters,
 def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
                       use_idx_fwd_, use_xcenters_, use_ycenters_,
                       use_trace_angles_, use_trace_lengths_):
+    ppm = 1e6
 
     phots = planet.normed_photometry_df[aper_column].values
     uncs = planet.normed_uncertainty_df[aper_column].values
@@ -137,7 +138,7 @@ def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
 
     correction = 2 * n_params * (n_params + 1) / (n_pts - n_params - 1)
 
-    sdnr_ = np.std(map_model - phots)
+    sdnr_ = np.std(map_model - phots) * ppm
     chisq_ = np.sum((map_model - phots)**2 / uncs**2)
     aic_ = chisq_ + 2 * n_params + correction
     bic_ = chisq_ + n_params * np.log10(n_pts)
@@ -296,7 +297,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
     assert(manual_argmin == argmin_aic_sub), \
         f'{manual_argmin}, {argmin_aic_sub}'
 
-    best_ppm = res_std_ppm[argmin_aic_sub]
+    best_ppm = sdnr_apers[argmin_aic_sub]
     width_best = aper_widths_[argmin_aic_sub]
     height_best = aper_heights_[argmin_aic_sub]
 
