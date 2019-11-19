@@ -1230,8 +1230,8 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     ax.plot(other_normed[idx_rev], flux_normed[idx_rev],
             'o', label='Reverse Scan')
 
-    ax.plot(other_normed[~inliers], flux_normed[~inliers], 'ro',
-            ms=15, mew=1, mec='r', color='None')
+    # ax.plot(other_normed[~inliers], flux_normed[~inliers], 'ro',
+    #         ms=15, mew=1, mec='r', color='None')
 
     other_normed_th = np.linspace(min_y, max_y, 100)
     times_normed_th = np.linspace(min_t, max_t, 100)
