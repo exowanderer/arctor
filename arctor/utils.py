@@ -1160,6 +1160,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                          xytext=(15, 15), n_sig=5, varname='Other',
                          n_spaces=[10, 10], convert_to_ppm=True,
                          fig=None, ax=None):
+    ppm = 1e6
 
     if fig is None and ax is None:
         fig, ax = plt.subplots()
