@@ -1253,7 +1253,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 fontsize=12,
                 )
 
-    ax.set_xlim(min_o - 0.01 * other_std, max_o + 0.01 * other_std)
+    ax.set_xlim(min_o - 1e-4 * other_std, max_o + 1e-4 * other_std)
     ax.set_ylabel('Flux [ppm]')
     ax.set_xlabel(f'{varname} [Median Subtracted]')
     ax.legend(loc=0)
