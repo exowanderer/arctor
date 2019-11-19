@@ -4,6 +4,19 @@ import os
 import pandas as pd
 
 from matplotlib import pyplot as plt
+from tqdm import tqdm
+
+
+def debug_message(message, end='\n'):
+    print(f'[DEBUG] {message}', end=end)
+
+
+def warning_message(message, end='\n'):
+    print(f'[WARNING] {message}', end=end)
+
+
+def info_message(message, end='\n'):
+    print(f'[INFO] {message}', end=end)
 
 
 def plot_map_model(times, phots, uncs, model, t0_guess):
@@ -94,6 +107,7 @@ def create_sub_sect(n_options, idx_split, use_xcenters, use_ycenters,
                     use_trace_angles, use_trace_lengths,
                     idx_split_, use_xcenters_, use_ycenters_,
                     use_trace_angles_, use_trace_lengths_):
+
     sub_sect = np.ones(n_options).astype(bool)
     _idx_split = idx_split == idx_split_
     _use_xcenters = use_xcenters == use_xcenters_
@@ -107,7 +121,7 @@ def create_sub_sect(n_options, idx_split, use_xcenters, use_ycenters,
     sub_sect = np.bitwise_and(sub_sect, _use_trace_angles)
     sub_sect = np.bitwise_and(sub_sect, _use_tracelengths)
 
-    return sub_sect
+    return np.where(sub_sect)[0]
 
 
 def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
@@ -148,77 +162,115 @@ def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
 
 def extract_map_only_data(planet, idx_fwd, idx_rev,
                           maps_only_filename=None,
-                          aper_columns_filename=None,
                           data_dir='notebooks'):
+
     if maps_only_filename is None:
-        maps_only_filename = 'results_decor_span_MAPs_only_SDNR.joblib.save'
+        maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
         maps_only_filename = os.path.join(data_dir, maps_only_filename)
 
-    if aper_columns_filename is None:
-        aper_columns_filename = 'decor_span_MAPs_only_aper_columns_list'
-        aper_columns_filename = f'{aper_columns_filename}.joblib.save'
-        aper_columns_filename = os.path.join(data_dir, aper_columns_filename)
+    info_message('Loading Decorrelation Results for MAPS only Results')
+    decor_span_MAPs = joblib.load(maps_only_filename)
+    decor_aper_columns_list = list(decor_span_MAPs.keys())
 
-    decor_span_MAPs_only_list = joblib.load(maps_only_filename)
-    decor_aper_columns_list = joblib.load(aper_columns_filename)
+    n_apers = len(decor_span_MAPs)
 
-    idx_split = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
-    use_xcenters = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
-    use_ycenters = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
-    use_trace_angles = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
-    use_trace_lengths = np.zeros(len(decor_span_MAPs_only_list), dtype=bool)
+    aper_widths = []
+    aper_heights = []
+    idx_split = []
+    use_xcenters = []
+    use_ycenters = []
+    use_trace_angles = []
+    use_trace_lengths = []
 
-    sdnr_apers = np.zeros(len(decor_span_MAPs_only_list))
-    chisq_apers = np.zeros(len(decor_span_MAPs_only_list))
-    aic_apers = np.zeros(len(decor_span_MAPs_only_list))
-    bic_apers = np.zeros(len(decor_span_MAPs_only_list))
-    res_std_ppm = np.zeros(len(decor_span_MAPs_only_list))
-    phots_std_ppm = np.zeros(len(decor_span_MAPs_only_list))
-    res_diff_ppm = np.zeros(len(decor_span_MAPs_only_list))
+    sdnr_apers = []
+    chisq_apers = []
+    aic_apers = []
+    bic_apers = []
+    res_std_ppm = []
+    phots_std_ppm = []
+    res_diff_ppm = []
+    keys_list = []
 
     n_pts = len(planet.normed_photometry_df)
 
-    zipper = zip(decor_aper_columns_list, decor_span_MAPs_only_list)
     map_solns = {}
     fine_grain_mcmcs_s = {}
-    for k, (aper_column, map_results) in enumerate(zipper):
-        idx_split[k] = map_results[0]
-        use_xcenters[k] = map_results[2]
-        use_ycenters[k] = map_results[3]
-        use_trace_angles[k] = map_results[4]
-        use_trace_lengths[k] = map_results[5]
-        fine_grain_mcmcs_ = map_results[6]
-        map_soln_ = map_results[7]
-        res_std_ppm[k] = map_results[8]
-        phots_std_ppm[k] = map_results[9]
-        res_diff_ppm[k] = map_results[10]
+    generator = enumerate(decor_span_MAPs.items())
+    for m, (aper_column, map_results) in tqdm(generator, total=n_apers):
+        if aper_column in ['xcenter', 'ycenter']:
+            continue
 
-        key = (f'idx_split:{idx_split[k]}'
-               f'_use_xcenters:{use_xcenters[k]}'
-               f'_use_ycenters:{use_ycenters[k]}'
-               f'_use_trace_angles:{use_trace_angles[k]}'
-               f'_use_trace_lengths:{use_trace_lengths[k]}')
+        n_results_ = len(map_results)
+        for map_result in map_results:
 
-        fine_grain_mcmcs_s[key] = fine_grain_mcmcs_
-        map_solns[key] = map_soln_
+            aper_width_, aper_height_ = np.int32(
+                aper_column.split('_')[-1].split('x'))
 
-        chisq_, aic_, bic_, sdnr_ = compute_chisq_aic(planet,
-                                                      aper_column,
-                                                      map_soln_,
-                                                      idx_fwd,
-                                                      idx_rev,
-                                                      idx_split[k],
-                                                      use_xcenters[k],
-                                                      use_ycenters[k],
-                                                      use_trace_angles[k],
-                                                      use_trace_lengths[k])
-        sdnr_apers[k] = sdnr_
-        chisq_apers[k] = chisq_
-        aic_apers[k] = aic_
-        bic_apers[k] = bic_
+            aper_widths.append(aper_width_)
+            aper_heights.append(aper_height_)
 
-    return (idx_split, use_xcenters, use_ycenters, use_trace_angles,
-            use_trace_lengths, fine_grain_mcmcs_s, map_solns,
+            idx_split.append(map_result[0])
+            use_xcenters.append(map_result[2])
+            use_ycenters.append(map_result[3])
+            use_trace_angles.append(map_result[4])
+            use_trace_lengths.append(map_result[5])
+
+            fine_grain_mcmcs_ = map_result[6]
+            map_soln_ = map_result[7]
+
+            res_std_ppm.append(map_result[8])
+            phots_std_ppm.append(map_result[9])
+            res_diff_ppm.append(map_result[10])
+
+            key = (f'aper_column:{aper_column}-'
+                   f'idx_split:{idx_split[-1]}-'
+                   f'_use_xcenters:{use_xcenters[-1]}-'
+                   f'_use_ycenters:{use_ycenters[-1]}-'
+                   f'_use_trace_angles:{use_trace_angles[-1]}-'
+                   f'_use_trace_lengths:{use_trace_lengths[-1]}')
+
+            keys_list.append(key)
+            fine_grain_mcmcs_s[key] = fine_grain_mcmcs_
+            map_solns[key] = map_soln_
+
+            chisq_, aic_, bic_, sdnr_ = compute_chisq_aic(
+                planet,
+                aper_column,
+                map_soln_,
+                idx_fwd,
+                idx_rev,
+                idx_split[-1],
+                use_xcenters[-1],
+                use_ycenters[-1],
+                use_trace_angles[-1],
+                use_trace_lengths[-1])
+
+            sdnr_apers.append(sdnr_)
+            chisq_apers.append(chisq_)
+            aic_apers.append(aic_)
+            bic_apers.append(bic_)
+
+    aper_widths = np.array(aper_widths)
+    aper_heights = np.array(aper_heights)
+    idx_split = np.array(idx_split)
+    use_xcenters = np.array(use_xcenters)
+    use_ycenters = np.array(use_ycenters)
+    use_trace_angles = np.array(use_trace_angles)
+    use_trace_lengths = np.array(use_trace_lengths)
+
+    sdnr_apers = np.array(sdnr_apers)
+    chisq_apers = np.array(chisq_apers)
+    aic_apers = np.array(aic_apers)
+    bic_apers = np.array(bic_apers)
+    res_std_ppm = np.array(res_std_ppm)
+    phots_std_ppm = np.array(phots_std_ppm)
+    res_diff_ppm = np.array(res_diff_ppm)
+    keys_list = np.array(keys_list)
+
+    return (decor_span_MAPs, keys_list, aper_widths, aper_heights,
+            idx_split, use_xcenters, use_ycenters,
+            use_trace_angles, use_trace_lengths,
+            fine_grain_mcmcs_s, map_solns,
             res_std_ppm, phots_std_ppm, res_diff_ppm,
             sdnr_apers, chisq_apers, aic_apers, bic_apers)
 
@@ -230,20 +282,20 @@ def plot_aper_width_grid():
                 res_diff_ppm[res_diff_ppm > 0],
                 c=res_diff_ppm[res_diff_ppm > 0])
 
-    plt.scatter((decor_aper_widths_only + 0.25 * use_xcenters)[use_xcenters],
-                (decor_aper_heights_only + 0.25 * use_ycenters)[~use_ycenters],
+    plt.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
+                (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
                 c=res_std_ppm, alpha=0.25, label='x:True y:False', marker='o')
 
-    plt.scatter((decor_aper_widths_only + 0.25 * use_xcenters)[use_xcenters],
-                (decor_aper_heights_only + 0.25 * use_ycenters)[use_ycenters],
+    plt.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
+                (aper_heights + 0.25 * use_ycenters)[use_ycenters],
                 c=res_std_ppm, alpha=0.25, label='x:True y:True', marker='s')
 
-    plt.scatter((decor_aper_widths_only + 0.25 * use_xcenters)[~use_xcenters],
-                (decor_aper_heights_only + 0.25 * use_ycenters)[use_ycenters],
+    plt.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
+                (aper_heights + 0.25 * use_ycenters)[use_ycenters],
                 c=res_std_ppm, alpha=0.25, label='x:False y:True', marker='*')
 
-    plt.scatter((decor_aper_widths_only + 0.25 * use_xcenters)[~use_xcenters],
-                (decor_aper_heights_only + 0.25 * use_ycenters)[~use_ycenters],
+    plt.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
+                (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
                 c=res_std_ppm[~use_xcenters], alpha=0.25,
                 label='x:False y:False', marker='^')
 
@@ -254,7 +306,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                                use_ycenters, use_trace_angles,
                                use_trace_lengths, res_std_ppm,
                                sdnr_apers, chisq_apers, aic_apers, bic_apers,
-                               decor_aper_widths_only, decor_aper_heights_only,
+                               aper_widths, aper_heights,
                                idx_split_, use_xcenters_, use_ycenters_,
                                use_trace_angles_, use_trace_lengths_,
                                focus='aic', one_fig=False, fig=None,
@@ -285,9 +337,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
     else:
         size = 200
 
-    aper_widths_ = decor_aper_widths_only[sub_sect]
-    aper_heights_ = decor_aper_heights_only[sub_sect]
-    out = ax.scatter(aper_widths_, aper_heights_,
+    out = ax.scatter(aper_widths[sub_sect], aper_heights[sub_sect],
                      c=focus_[sub_sect],
                      marker='s', s=200)
 
@@ -297,11 +347,11 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
     assert(manual_argmin == argmin_aic_sub), \
         f'{manual_argmin}, {argmin_aic_sub}'
 
-    best_ppm = sdnr_apers[argmin_aic_sub]
-    width_best = aper_widths_[argmin_aic_sub]
-    height_best = aper_heights_[argmin_aic_sub]
+    best_ppm = sdnr_apers[sub_sect][argmin_aic_sub]
+    width_best = aper_widths[sub_sect][argmin_aic_sub]
+    height_best = aper_heights[sub_sect][argmin_aic_sub]
 
-    txt = f'{best_ppm:0.1f} ppm\n[{width_best}x{height_best}]'
+    txt = f'{np.round(best_ppm):0.0f} ppm\n[{width_best}x{height_best}]'
     ax.plot(width_best - 0.5, height_best - 0.5, 'o',
             color='C1', ms=10)
 
@@ -343,7 +393,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                 textcoords='offset points',
                 ha='left',
                 va='top',
-                fontsize=8,
+                fontsize=10,
                 color='black',
                 weight='bold')
 
@@ -367,8 +417,8 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
                                    use_trace_lengths, res_std_ppm,
                                    sdnr_apers, chisq_apers,
                                    aic_apers, bic_apers,
-                                   decor_aper_widths_only,
-                                   decor_aper_heights_only,
+                                   aper_widths,
+                                   aper_heights,
                                    idx_split_, use_xcenters_, use_ycenters_,
                                    use_trace_angles_, use_trace_lengths_):
 
@@ -384,8 +434,8 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
                                use_trace_angles_,
                                use_trace_lengths_)
 
-    aper_widths_sub = decor_aper_widths_only[sub_sect]
-    aper_heights_sub = decor_aper_heights_only[sub_sect]
+    aper_widths_sub = aper_widths[sub_sect]
+    aper_heights_sub = aper_heights[sub_sect]
 
     argbest_ppm = res_std_ppm[sub_sect].argmin()
 
@@ -420,13 +470,13 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
     return entry
 
 
-def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
+def create_results_df(aper_widths, aper_heights,
                       res_std_ppm, sdnr_apers, chisq_apers,
                       aic_apers, bic_apers, idx_split,
                       use_xcenters, use_ycenters,
                       use_trace_angles, use_trace_lengths):
 
-    n_options = len(decor_aper_widths_only)
+    n_options = len(aper_widths)
     results_dict = {}
     for idx_split_ in [True, False]:
         for use_xcenters_ in [True, False]:
@@ -437,7 +487,7 @@ def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
                             n_options, idx_split, use_xcenters, use_ycenters,
                             use_trace_angles, use_trace_lengths, res_std_ppm,
                             sdnr_apers, chisq_apers, aic_apers, bic_apers,
-                            decor_aper_widths_only, decor_aper_heights_only,
+                            aper_widths, aper_heights,
                             idx_split_, use_xcenters_, use_ycenters_,
                             use_trace_angles_, use_trace_lengths_)
 
@@ -450,8 +500,8 @@ def create_results_df(decor_aper_widths_only, decor_aper_heights_only,
     return pd.DataFrame(results_dict)
 
 
-def plot_32_subplots_for_each_feature(decor_aper_widths_only,
-                                      decor_aper_heights_only,
+def plot_32_subplots_for_each_feature(aper_widths,
+                                      aper_heights,
                                       res_std_ppm, sdnr_apers, chisq_apers,
                                       aic_apers, bic_apers,
                                       idx_split, use_xcenters,
@@ -462,7 +512,7 @@ def plot_32_subplots_for_each_feature(decor_aper_widths_only,
     if one_fig:
         fig, axs = plt.subplots(nrows=4, ncols=8)
 
-    n_options = len(decor_aper_widths_only)
+    n_options = len(aper_widths)
     counter = 0
     for idx_split_ in [True, False]:
         for use_xcenters_ in [True, False]:
@@ -486,8 +536,8 @@ def plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                                    chisq_apers,
                                                    aic_apers,
                                                    bic_apers,
-                                                   decor_aper_widths_only,
-                                                   decor_aper_heights_only,
+                                                   aper_widths,
+                                                   aper_heights,
                                                    idx_split_,
                                                    use_xcenters_,
                                                    use_ycenters_,
@@ -496,40 +546,176 @@ def plot_32_subplots_for_each_feature(decor_aper_widths_only,
                                                    focus=focus,
                                                    one_fig=one_fig)
 
+
+def get_map_results_models(times, map_soln, idx_fwd, idx_rev):
+    if 'mean_fwd' not in map_soln.keys():
+        map_model = map_soln['light_curves'].flatten()
+        line_model = map_soln['line_model'].flatten()
+    else:
+        map_model = np.zeros_like(times)
+        line_model = np.zeros_like(times)
+        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten()
+        line_model[idx_fwd] = map_soln['line_model_fwd'].flatten()
+
+        map_model[idx_rev] = map_soln['light_curves_rev'].flatten()
+        line_model[idx_rev] = map_soln['line_model_rev'].flatten()
+
+    return map_model, line_model
+
+
+def plot_best_aic_light_curve(planet, map_solns, decor_results_df,
+                              aic_apers,  keys_list, aic_thresh=2,
+                              t0_base=0, ax=None):
+    ppm = 1e6
+
+    idx_fwd = planet.idx_fwd
+    idx_rev = planet.idx_rev
+    times = planet.times - t0_base
+
+    HOME = os.environ['HOME']
+    save_dir = os.path.join(HOME, 'Research', 'Planets',
+                            'WASP43', 'github_analysis',
+                            'paper', 'figures')
+
+    aic_argmin = decor_results_df['aic_sub_min'].values.argmin()
+    aic_min = decor_results_df['aic_sub_min'].iloc[aic_argmin]
+
+    width_best = decor_results_df['width_best'].iloc[aic_argmin]
+    height_best = decor_results_df['height_best'].iloc[aic_argmin]
+    idx_split = decor_results_df['idx_split'].iloc[aic_argmin]
+    use_xcenters = decor_results_df['xcenters'].iloc[aic_argmin]
+    use_ycenters = decor_results_df['xcenters'].iloc[aic_argmin]
+    use_trace_angles = decor_results_df['trace_angles'].iloc[aic_argmin]
+    use_trace_lengths = decor_results_df['trace_lengths'].iloc[aic_argmin]
+
+    aper_column = f'aperture_sum_{width_best}x{height_best}'
+
+    map_soln_key = (f'aper_column:{aper_column}-'
+                    f'idx_split:{idx_split}-'
+                    f'_use_xcenters:{use_xcenters}-'
+                    f'_use_ycenters:{use_ycenters}-'
+                    f'_use_trace_angles:{use_trace_angles}-'
+                    f'_use_trace_lengths:{use_trace_lengths}')
+
+    map_soln = map_solns[map_soln_key]
+    map_model, line_model = get_map_results_models(times, map_soln,
+                                                   idx_fwd, idx_rev)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.clear()
+
+    phots = planet.normed_photometry_df[aper_column]
+    uncs = planet.normed_uncertainty_df[aper_column]
+
+    ax.errorbar(times, (phots - line_model) * ppm, uncs * ppm,
+                fmt='o', color='k', ms=10, zorder=10)
+    ax.plot(times[times.argsort()], map_model[times.argsort()] * ppm,
+            color='C1', lw=3, zorder=5)
+
+    idx_split_vals = decor_results_df['idx_split'].values
+    use_xcenters_vals = decor_results_df['xcenters'].values
+    use_ycenters_vals = decor_results_df['xcenters'].values
+    use_trace_angles_vals = decor_results_df['trace_angles'].values
+    use_trace_lengths_vals = decor_results_df['trace_lengths'].values
+
+    for aper_column in tqdm(planet.normed_photometry_df.columns):
+        if 'aperture_sum_' not in aper_column:
+            continue
+
+        for entry in zip(idx_split_vals,
+                         use_xcenters_vals,
+                         use_ycenters_vals,
+                         use_trace_angles_vals,
+                         use_trace_lengths_vals):
+
+            idx_split = entry[0]
+            use_xcenters = entry[1]
+            use_xcenters = entry[2]
+            use_trace_angles = entry[3]
+            use_trace_lengths = entry[4]
+
+            phots = planet.normed_photometry_df[aper_column]
+            uncs = planet.normed_uncertainty_df[aper_column]
+
+            map_soln_key = (f'aper_column:{aper_column}-'
+                            f'idx_split:{idx_split}-'
+                            f'_use_xcenters:{use_xcenters}-'
+                            f'_use_ycenters:{use_ycenters}-'
+                            f'_use_trace_angles:{use_trace_angles}-'
+                            f'_use_trace_lengths:{use_trace_lengths}')
+
+            idx_ = keys_list == map_soln_key
+            aic_ = aic_apers[idx_][0]
+
+            if abs(aic_ - aic_min) > aic_thresh:
+                continue
+
+            map_soln = map_solns[map_soln_key]
+            map_model, line_model = get_map_results_models(times,
+                                                           map_soln,
+                                                           idx_fwd,
+                                                           idx_rev)
+
+            ax.plot(times, (phots - line_model) * ppm, 'o',
+                    color='lightgrey', alpha=0.05, mew=None, zorder=-1)
+            ax.plot(times[times.argsort()], map_model[times.argsort()] * ppm,
+                    color='pink', lw=3, alpha=0.05, zorder=-1)
+
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
+
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+
+    plt.show()
+
+    return ax
+
+
 if __name__ == '__main__':
     import os
-    HOME = os.environ['HOME']
-    os.chdir(f'{HOME}/Research/Planets/WASP43/github_analysis/notebooks')
 
     import joblib
     import numpy as np
-    import matplotlib.pyplot as plt
+
     import pandas as pd
 
     from exomast_api import exoMAST_API
+    from matplotlib import use as mpl_use
+    mpl_use('Qt5Agg')
+
+    from matplotlib import pyplot as plt
 
     from arctor import Arctor
     from arctor.utils import setup_and_plot_GTC
     from arctor.utils import fit_2D_time_vs_other
     from anaylze_map_only_sdnr import *
 
+    HOME = os.environ['HOME']
+    # os.chdir(f'{HOME}/Research/Planets/WASP43/github_analysis/notebooks')
+
     plot_verbose = False
     save_now = False
     planet_name = 'WASP43'
     file_type = 'flt.fits'
 
-    HOME = os.environ['HOME']
-    base_dir = os.path.join(HOME, 'Research', 'Planets', 'WASP43')
+    base_dir = os.path.join('/Volumes', 'WhenImSixtyFourGB', 'WASP43')
     data_dir = os.path.join(base_dir, 'data', 'UVIS', 'MAST_2019-07-03T0738')
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
 
-    saving_dir = os.path.join(base_dir, 'github_analysis', 'savefiles')
+    save_dir = os.path.join('/Volumes', 'WhenImSixtyFourGB', 'savefiles')
     working_dir = os.path.join(base_dir, 'github_analysis')
-    os.chdir(working_dir)
 
-    planet = Arctor(planet_name, data_dir, saving_dir, file_type)
+    planet = Arctor(planet_name, data_dir, save_dir, file_type)
     joblib_filename = 'WASP43_savedict_206ppm_100x100_finescale.joblib.save'
-    joblib_filename = f'{HOME}/Research/Planets/savefiles/{joblib_filename}'
+    joblib_filename = os.path.join(save_dir, joblib_filename)
+
+    info_message('Loading Joblib Savefile to Populate `planet`')
     planet.load_dict(joblib_filename)
 
     med_phot_df = np.median(planet.photometry_df, axis=0)
@@ -545,54 +731,97 @@ if __name__ == '__main__':
         np.round(((np.median(times) - t0_wasp43) / period_wasp43) - 0.5))
     t0_guess = t0_wasp43 + (n_epochs + 0.5) * period_wasp43
 
-    maps_only_filename = '../results_decor_span_MAPs_only_SDNR.joblib.save'
-    aper_columns_filename = os.path.join(
-        'notebooks', 'decor_span_MAPs_only_aper_columns_list')
+    data_dir = '/Volumes/WhenImSixtyFourGB/WASP43/github_analysis/notebooks'
+    maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
+    maps_only_filename = os.path.join(data_dir, maps_only_filename)
 
     idx_fwd = planet.idx_fwd
     idx_rev = planet.idx_rev
 
-    idx_split, use_xcenters, use_ycenters, use_trace_angles, \
-        use_trace_lengths, fine_grain_mcmcs_s, map_solns, res_std_ppm, \
-        phots_std_ppm, res_diff_ppm, sdnr_apers, chisq_apers,\
-        aic_apers, bic_apers = extract_map_only_data(planet, idx_fwd, idx_rev)
+    decor_span_MAPs, keys_list, aper_widths, aper_heights, idx_split,\
+        use_xcenters, use_ycenters, use_trace_angles, use_trace_lengths,\
+        fine_grain_mcmcs_s, map_solns, res_std_ppm, phots_std_ppm,\
+        res_diff_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers = extract_map_only_data(
+            planet, idx_fwd, idx_rev, maps_only_filename=maps_only_filename)
 
     filename = 'decor_span_MAPs_only_aper_columns_list.joblib.save'
-    filename = os.path.join('notebooks', filename)
-    decor_aper_columns_list = joblib.load(filename)
+    filename = os.path.join(data_dir, filename)
 
-    decor_aper_widths_heights_list = []
-    for aper_column in decor_aper_columns_list:
-        entry = np.int32(aper_column.split('_')[-1].split('x'))
-        decor_aper_widths_heights_list.append(entry)
-
-    decor_aper_widths_only, decor_aper_heights_only = np.transpose(
-        decor_aper_widths_heights_list)
-
-    decor_results_df = create_results_df(decor_aper_widths_only,
-                                         decor_aper_heights_only,
+    decor_results_df = create_results_df(aper_widths,
+                                         aper_heights,
                                          res_std_ppm,
                                          sdnr_apers,
                                          chisq_apers,
                                          aic_apers,
                                          bic_apers,
-                                         ~idx_split,
-                                         ~use_xcenters,
-                                         ~use_ycenters,
-                                         ~use_trace_angles,
-                                         ~use_trace_lengths)
+                                         idx_split,
+                                         use_xcenters,
+                                         use_ycenters,
+                                         use_trace_angles,
+                                         use_trace_lengths)
 
-    plot_32_subplots_for_each_feature(decor_aper_widths_only,
-                                      decor_aper_heights_only,
+    plot_32_subplots_for_each_feature(aper_widths,
+                                      aper_heights,
                                       res_std_ppm,
                                       sdnr_apers,
                                       chisq_apers,
                                       aic_apers,
                                       bic_apers,
-                                      ~idx_split,
-                                      ~use_xcenters,
-                                      ~use_ycenters,
-                                      ~use_trace_angles,
-                                      ~use_trace_lengths,
+                                      idx_split,
+                                      use_xcenters,
+                                      use_ycenters,
+                                      use_trace_angles,
+                                      use_trace_lengths,
                                       one_fig=True,
                                       focus='aic')
+    fig, ax = plt.subplots()
+    ax = plot_best_aic_light_curve(planet, map_solns, decor_results_df,
+                                   aic_apers, keys_list, aic_thresh=5, ax=ax)
+
+    import os
+    import joblib
+
+    base_dir = os.path.join('/Volumes', 'WhenImSixtyFourGB', 'WASP43')
+    working_dir = os.path.join(base_dir, 'github_analysis')
+    mcmc_18x50_filename = 'results_decor_span_MCMCs_25_bestest_SDNR_'\
+        'aperture_sum_18x50.joblib.save'
+
+    mcmc_18x50_dir = 'notebooks/all400_results_decor_MCMCs_SDNR'
+    mcmc_18x50_filename = os.path.join(mcmc_18x50_dir, mcmc_18x50_filename)
+    mcmc_18x50 = joblib.load(mcmc_18x50_filename)
+
+    varnames = [key for key in map_soln.keys()
+                if '__' not in key and 'light' not in key
+                and 'line' not in key and 'le_edepth_0' not in key]
+
+    best = [False, True, True, True, False, True]
+
+    for k, thingy in enumerate(mcmc_18x50['aperture_sum_18x50']):
+        isit = True
+        for m, thingies in enumerate(thingy[:6]):
+            isit = isit and (thingies == best[m])
+            if isit:
+                idx_best = k
+
+    idx_mcmc = 7
+    samples = pm.trace_to_dataframe(
+        mcmc_18x50['aperture_sum_18x50'][idx_best][idx_mcmc], varnames=varnames
+    )
+
+    samples_fname = mcmc_18x50_filename.replace('.joblib.save',
+                                                '_samples_df.csv')
+
+    samples.to_csv(samples_fname, index=False)
+    samples = pd.read_csv('notebooks/'
+                          'results_decor_span_MCMCs_25_bestest_'
+                          'SDNR_aperture_sum_18x50_samples_df.csv')
+
+    pygtc.plotGTC(samples,
+                  plotName=plotName,
+                  smoothingKernel=smoothingKernel,
+                  labelRotation=[True] * 2,
+                  # plotDensity=True,
+                  customLabelFont={'rotation': 45, 'size': 20},
+                  nContourLevels=3,
+                  figureSize='APJ_page'
+                  )

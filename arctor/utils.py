@@ -25,7 +25,7 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def setup_and_plot_GTC(mcmc_fit, plotName='None',
+def setup_and_plot_GTC(mcmc_fit, plotName='',
                        varnames=None,
                        smoothingKernel=1,
                        square_edepth=False):
@@ -1157,7 +1157,7 @@ from matplotlib import pyplot as plt
 
 
 def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
-                         n_sig=5, label=None):
+                         xytext=(15, 15), n_sig=5, label=None):
 
     inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
                       ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
@@ -1207,7 +1207,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     plt.annotate(annotation,
                  (0, 0),
                  xycoords="axes fraction",
-                 xytext=(15, 15),
+                 xytext=xytext,
                  textcoords="offset points",
                  ha="left",
                  va="bottom",
