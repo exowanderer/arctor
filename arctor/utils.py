@@ -1235,8 +1235,8 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
             flux_normed[idx_rev] * flux_std * ppm,
             'o', label='Reverse Scan')
 
-    other_normed_th = np.linspace(min_o, max_o, 100)
-    times_normed_th = np.linspace(min_t, max_t, 100)
+    other_normed_th = np.linspace(2 * min_o, 2 * max_o, 100)
+    times_normed_th = np.linspace(2 * min_t, 2 * max_t, 100)
 
     best_model = fit_comb(other_normed_th, times_normed_th)
     ax.plot(other_normed_th * other_std, best_model * flux_std * ppm,
@@ -1253,7 +1253,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 fontsize=12,
                 )
 
-    # ax.set_xlim(min_o - 1e-4 * other_std, max_o + 1e-4 * other_std)
+    ax.set_xlim(min_o, max_o)
     ax.set_ylabel('Flux [ppm]')
     ax.set_xlabel(f'{varname} [Median Subtracted]')
     ax.legend(loc=0)
