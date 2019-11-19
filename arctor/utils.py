@@ -1191,8 +1191,8 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     #               f'c_intcpt:{fit_comb.intercept.value:0.2e}'
     #               )
     annotation = (f'2D Slope {varname}: {fit_comb.slope_x.value:0.2f}\n'
-                  f'2D Slope Time:      {fit_comb.slope_y.value:0.2e}\n'
-                  f'2D Intercept:       {fit_comb.intercept.value:0.2f}'
+                  f'2D Slope Time:{'      '}{fit_comb.slope_y.value:0.2e}\n'
+                  f'2D Intercept:{'       '}{fit_comb.intercept.value:0.2f}'
                   )
 
     min_y = other.min()
