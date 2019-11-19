@@ -1192,8 +1192,9 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     flux_std = np.median(flux[inliers])
     flux_normed = (flux - flux_med) / flux_std
 
-    flux_corrected = flux_normed - fit_t(times_normed)
     fit_t = fitter_t(model_t, times_normed[inliers], flux_normed[inliers])
+
+    flux_corrected = flux_normed - fit_t(times_normed)
     fit_o = fitter_o(model_o, other_normed[inliers], flux_corrected[inliers])
 
     model_comb = Planar2D(slope_x=fit_o.slope,
