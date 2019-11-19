@@ -1158,7 +1158,17 @@ from matplotlib import pyplot as plt
 
 def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                          xytext=(15, 15), n_sig=5, varname='Other',
-                         n_spaces=[10, 10]):
+                         n_spaces=[10, 10], convert_to_ppm=True,
+                         fig=None, ax=None):
+
+    if fig is None and ax is None:
+        fig, ax = plt.subplots()
+
+    if ax is None:
+        ax = fig.add_subplot(111)
+
+    if ax is None:
+        fig, ax = plt.subplots()
 
     inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
                       ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
@@ -1169,19 +1179,31 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     model_o = Linear1D(slope=1e-6, intercept=np.median(flux))
     model_t = Linear1D(slope=-1e-3, intercept=0)
 
-    fit_t = fitter_t(model_t, times[inliers] - np.median(times[inliers]),
-                     flux[inliers])
-    fit_o = fitter_o(model_o, other[inliers] - np.median(other[inliers]),
-                     flux[inliers] - fit_t(times[inliers] - np.median(times)))
+    times_med = np.median(times[inliers])
+    times_std = np.median(times[inliers])
+
+    times_normed = (times - times_med) / times_std
+
+    other_med = np.median(other[inliers])
+    other_std = np.median(other[inliers])
+    other_normed = (other - other_med) / other_std
+
+    flux_med = np.median(flux[inliers])
+    flux_std = np.median(flux[inliers])
+    flux_normed = (flux - flux_med) / flux_std
+
+    flux_corrected = flux_normed - fit_t(times_normed)
+    fit_t = fitter_t(model_t, times_normed[inliers], flux_normed[inliers])
+    fit_o = fitter_o(model_o, other_normed[inliers], flux_corrected[inliers])
 
     model_comb = Planar2D(slope_x=fit_o.slope,
                           slope_y=fit_t.slope,
                           intercept=fit_t.intercept)
 
     fit_comb = fitter_t(model_comb,
-                        other[inliers] - np.median(other[inliers]),
-                        times[inliers] - np.median(times[inliers]),
-                        flux[inliers])
+                        other_normed[inliers],
+                        times_normed[inliers],
+                        flux_normed[inliers])
 
     # annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
     #               f't_slope:{fit_t.slope.value:0.2e}\n'
@@ -1197,25 +1219,35 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                   f'2D Intercept:{" "*(n_sp1)}{fit_comb.intercept.value:0.2e}'
                   )
 
-    min_y = other.min()
-    max_y = other.max()
-    min_t = times.min() - np.median(times)
-    max_t = times.max() - np.median(times)
-    plt.plot(other[idx_fwd], flux[idx_fwd], 'o')
-    plt.plot(other[idx_rev], flux[idx_rev], 'o')
-    plt.plot(other[~inliers], flux[~inliers], 'ro',
-             ms=15, mew=1, mec='r', color='None')
+    min_y = other_normed.min()
+    max_y = other_normed.max()
+    min_t = times_normed.min()
+    max_t = times_normed.max()
 
-    other_th = np.linspace(min_y, max_y, 100)
-    times_th = np.linspace(min_t, max_t, 100)
-    plt.plot(other_th, fit_comb(other_th - np.median(other), times_th))
-    plt.title(f'{varname} + Time 2D Fit to Flux')
-    plt.annotate(annotation,
-                 (0, 0),
-                 xycoords="axes fraction",
-                 xytext=xytext,
-                 textcoords="offset points",
-                 ha="left",
-                 va="bottom",
-                 fontsize=12,
-                 )
+    ax.plot(other_normed[idx_fwd], flux_normed[idx_fwd],
+            'o', label='Forward Scan')
+    ax.plot(other_normed[idx_rev], flux_normed[idx_rev],
+            'o', label='Reverse Scan')
+
+    ax.plot(other_normed[~inliers], flux_normed[~inliers], 'ro',
+            ms=15, mew=1, mec='r', color='None')
+
+    other_normed_th = np.linspace(min_y, max_y, 100)
+    times_normed_th = np.linspace(min_t, max_t, 100)
+
+    ax.plot(other_normed_th, fit_comb(other_normed_th, times_normed_th))
+    ax.set_title(f'{varname} + Time 2D Fit to Flux')
+    ax.annotate(annotation,
+                (0, 0),
+                xycoords="axes fraction",
+                xytext=xytext,
+                textcoords="offset points",
+                ha="left",
+                va="bottom",
+                fontsize=12,
+                )
+    ax.set_ylabel('Flux [ppm]')
+    ax.set_ylim()
+    ax.legend(loc=0)
+
+    return fig, ax
