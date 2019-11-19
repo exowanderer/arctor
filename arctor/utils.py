@@ -1158,7 +1158,7 @@ from matplotlib import pyplot as plt
 
 def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                          xytext=(15, 15), n_sig=5, varname='Other',
-                         n_spaces=[10, 10], convert_to_ppm=True,
+                         n_spaces=[10, 10], convert_to_ppm=True, lw=3,
                          fig=None, ax=None):
     ppm = 1e6
 
@@ -1239,7 +1239,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     times_normed_th = np.linspace(min_t, max_t, 100)
 
     best_model = fit_comb(other_normed_th, times_normed_th)
-    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm)
+    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm, lw=lw)
 
     ax.set_title(f'{varname} + Time 2D Fit to Flux')
     ax.annotate(annotation,

@@ -783,12 +783,12 @@ if __name__ == '__main__':
 
     base_dir = os.path.join('/Volumes', 'WhenImSixtyFourGB', 'WASP43')
     working_dir = os.path.join(base_dir, 'github_analysis')
-    mcmc_18x50_filename = 'results_decor_span_MCMCs_25_bestest_SDNR_'\
-        'aperture_sum_18x50.joblib.save'
+    mcmc_13x45_filename = 'results_decor_span_MCMCs_25_bestest_SDNR_'\
+        'aperture_sum_13x45.joblib.save'
 
-    mcmc_18x50_dir = 'notebooks/all400_results_decor_MCMCs_SDNR'
-    mcmc_18x50_filename = os.path.join(mcmc_18x50_dir, mcmc_18x50_filename)
-    mcmc_18x50 = joblib.load(mcmc_18x50_filename)
+    mcmc_13x45_dir = 'notebooks/all400_results_decor_MCMCs_SDNR'
+    mcmc_13x45_filename = os.path.join(mcmc_13x45_dir, mcmc_13x45_filename)
+    mcmc_13x45 = joblib.load(mcmc_13x45_filename)
 
     varnames = [key for key in map_soln.keys()
                 if '__' not in key and 'light' not in key
@@ -796,7 +796,7 @@ if __name__ == '__main__':
 
     best = [False, True, True, True, False, True]
 
-    for k, thingy in enumerate(mcmc_18x50['aperture_sum_18x50']):
+    for k, thingy in enumerate(mcmc_13x45['aperture_sum_13x45']):
         isit = True
         for m, thingies in enumerate(thingy[:6]):
             isit = isit and (thingies == best[m])
@@ -805,16 +805,17 @@ if __name__ == '__main__':
 
     idx_mcmc = 7
     samples = pm.trace_to_dataframe(
-        mcmc_18x50['aperture_sum_18x50'][idx_best][idx_mcmc], varnames=varnames
+        mcmc_13x45['aperture_sum_13x45'][idx_best][idx_mcmc], varnames=varnames
     )
 
-    samples_fname = mcmc_18x50_filename.replace('.joblib.save',
+    samples_fname = mcmc_13x45_filename.replace('.joblib.save',
                                                 '_samples_df.csv')
 
-    samples.to_csv(samples_fname, index=False)
+    # samples.to_csv(samples_fname, index=False)
+
     samples = pd.read_csv('notebooks/'
                           'results_decor_span_MCMCs_25_bestest_'
-                          'SDNR_aperture_sum_18x50_samples_df.csv')
+                          'SDNR_aperture_sum_13x45_samples_df.csv')
 
     pygtc.plotGTC(samples,
                   plotName=plotName,
