@@ -1232,9 +1232,6 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     ax.plot(other_normed[idx_rev], flux_normed[idx_rev] * flux_std * ppm,
             'o', label='Reverse Scan')
 
-    # ax.plot(other_normed[~inliers], flux_normed[~inliers], 'ro',
-    #         ms=15, mew=1, mec='r', color='None')
-
     other_normed_th = np.linspace(min_y, max_y, 100)
     times_normed_th = np.linspace(min_t, max_t, 100)
 
@@ -1250,8 +1247,9 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 va="bottom",
                 fontsize=12,
                 )
+
     ax.set_ylabel('Flux [ppm]')
-    ax.set_ylim()
+    ax.set_xlabel(f'{varname} [Median-StdDev Normalized]')
     ax.legend(loc=0)
 
     return fig, ax
