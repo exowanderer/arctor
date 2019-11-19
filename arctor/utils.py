@@ -1157,7 +1157,7 @@ from matplotlib import pyplot as plt
 
 
 def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
-                         xytext=(15, 15), n_sig=5, label=None):
+                         xytext=(15, 15), n_sig=5, varname='Other'):
 
     inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
                       ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
@@ -1182,13 +1182,17 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                         times[inliers] - np.median(times[inliers]),
                         flux[inliers])
 
-    annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
-                  f't_slope:{fit_t.slope.value:0.2e}\n'
-                  f'c_slope_o:{fit_comb.slope_x.value:0.2e}\n'
-                  f'c_slope_t:{fit_comb.slope_y.value:0.2e}\n'
-                  f'o_intcpt:{fit_o.intercept.value:0.2e}\n'
-                  f't_intcpt:{fit_t.intercept.value:0.2e}\n'
-                  f'c_intcpt:{fit_comb.intercept.value:0.2e}'
+    # annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
+    #               f't_slope:{fit_t.slope.value:0.2e}\n'
+    #               f'c_slope_o:{fit_comb.slope_x.value:0.2e}\n'
+    #               f'c_slope_t:{fit_comb.slope_y.value:0.2e}\n'
+    #               f'o_intcpt:{fit_o.intercept.value:0.2e}\n'
+    #               f't_intcpt:{fit_t.intercept.value:0.2e}\n'
+    #               f'c_intcpt:{fit_comb.intercept.value:0.2e}'
+    #               )
+    annotation = (f'2D Slope {varname}:{fit_comb.slope_x.value:0.2e}\n'
+                  f'2D Slope Time:{fit_comb.slope_y.value:0.2e}\n'
+                  f'2D Intercept:{fit_comb.intercept.value:0.2e}'
                   )
 
     min_y = other.min()
@@ -1203,7 +1207,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     other_th = np.linspace(min_y, max_y, 100)
     times_th = np.linspace(min_t, max_t, 100)
     plt.plot(other_th, fit_comb(other_th - np.median(other), times_th))
-    plt.title(label)
+    plt.title(f'{varname} + Time 2D Fit to Flux')
     plt.annotate(annotation,
                  (0, 0),
                  xycoords="axes fraction",
