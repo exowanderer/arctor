@@ -1235,8 +1235,8 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
             flux_normed[idx_rev] * flux_std * ppm,
             'o', label='Reverse Scan')
 
-    other_normed_th = np.linspace(min_o * 0.9, max_o * 1.1, 2)
-    times_normed_th = np.linspace(min_t * 0.9, max_t * 1.1, 2)
+    other_normed_th = np.linspace(min_o * 0.9, max_o * 1.1, 100)
+    times_normed_th = np.linspace(min_t * 0.9, max_t * 1.1, 100)
 
     best_model = fit_comb(other_normed_th, times_normed_th)
     ax.plot(other_normed_th * other_std, best_model * flux_std * ppm,
