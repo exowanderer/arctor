@@ -1239,7 +1239,8 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     times_normed_th = np.linspace(min_t, max_t, 100)
 
     best_model = fit_comb(other_normed_th, times_normed_th)
-    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm, lw=lw)
+    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm,
+            lw=lw, zorder=0)
 
     ax.set_title(f'{varname} + Time 2D Fit to Flux')
     ax.annotate(annotation,
