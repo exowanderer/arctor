@@ -1252,7 +1252,7 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 )
 
     ax.set_ylabel('Flux [ppm]')
-    ax.set_xlabel(f'{varname} [Median-StdDev Normalized]')
+    ax.set_xlabel(f'{varname} [Median Subtracted]')
     ax.legend(loc=0)
 
     return fig, ax
