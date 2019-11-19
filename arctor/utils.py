@@ -1227,16 +1227,19 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     min_t = times_normed.min()
     max_t = times_normed.max()
 
-    ax.plot(other_normed[idx_fwd], flux_normed[idx_fwd] * flux_std * ppm,
+    ax.plot(other_normed[idx_fwd] * other_std,
+            flux_normed[idx_fwd] * flux_std * ppm,
             'o', label='Forward Scan')
-    ax.plot(other_normed[idx_rev], flux_normed[idx_rev] * flux_std * ppm,
+    ax.plot(other_normed[idx_rev] * other_std,
+            flux_normed[idx_rev] * flux_std * ppm,
             'o', label='Reverse Scan')
 
     other_normed_th = np.linspace(min_y, max_y, 100)
     times_normed_th = np.linspace(min_t, max_t, 100)
 
     best_model = fit_comb(other_normed_th, times_normed_th)
-    ax.plot(other_normed_th, best_model * flux_std * ppm)
+    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm)
+
     ax.set_title(f'{varname} + Time 2D Fit to Flux')
     ax.annotate(annotation,
                 (0, 0),
