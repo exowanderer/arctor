@@ -1157,7 +1157,8 @@ from matplotlib import pyplot as plt
 
 
 def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
-                         xytext=(15, 15), n_sig=5, varname='Other'):
+                         xytext=(15, 15), n_sig=5, varname='Other',
+                         n_space=10):
 
     inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
                       ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
@@ -1191,8 +1192,9 @@ def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     #               f'c_intcpt:{fit_comb.intercept.value:0.2e}'
     #               )
     annotation = (f'2D Slope {varname}: {fit_comb.slope_x.value:0.2e}\n'
-                  f'2D Slope Time:{" "*11}{fit_comb.slope_y.value:0.2e}\n'
-                  f'2D Intercept:{" "*12}{fit_comb.intercept.value:0.2e}'
+                  f'2D Slope Time:{" "*n_space}{fit_comb.slope_y.value:0.2e}\n'
+                  f'2D Intercept:{" "*(n_space+1)}'
+                  f'{fit_comb.intercept.value:0.2e}'
                   )
 
     min_y = other.min()
