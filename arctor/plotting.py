@@ -693,7 +693,7 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
 
     n_sp0, n_sp1 = n_spaces
     annotation = (f'2D Slope {varname}: {fit_comb.slope_x.value:0.2e}\n'
-                  f'2D Slope Time:{" "*n_sp0}{fit_comb.slope_y.value:0.2e}\n'
+                  f'2D Slope Time:{" "*n_sp0}{fit_comb.slope_y.value:0.2f}\n'
                   f'2D Intercept:{" "*(n_sp1)}'
                   f'{fit_comb.intercept.value * flux_std * ppm:0.2f} [ppm]'
                   )
