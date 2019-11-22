@@ -25,6 +25,50 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
+def get_flux_idx_from_df(planet, aper_width, aper_height):
+    # There *must* be a faster way!
+    aperwidth_columns = [colname
+                         for colname in planet.photometry_df.columns
+                         if 'aper_width' in colname]
+
+    aperheight_columns = [colname
+                          for colname in planet.photometry_df.columns
+                          if 'aper_height' in colname]
+
+    trace_length = np.median(planet.trace_lengths) - 0.1
+
+    aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
+    aperwidths_df = aperwidths_df.astype(int)
+
+    aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
+    aperwidth_flag = aperwidths_df.values[0] == aper_width
+    aperheight_flag = aperheight_df.values[0] == aper_height
+
+    return np.where(aperwidth_flag * aperheight_flag)  # [0][0]
+
+
+def print_flux_stddev(planet, aper_width, aper_height):
+    # There *must* be a faster way!
+    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+    fluxes = fluxes / np.median(fluxes)
+
+    info_message(f'{aper_width}x{aper_height}: {np.std(fluxes)*1e6:0.0f} ppm')
+
+
+def find_flux_stddev(planet, flux_std, aper_widths, aper_heights):
+    # There *must* be a faster way!
+    for aper_width in tqdm(aper_widths):
+        for aper_height in tqdm(aper_heights):
+            flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
+            fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+            fluxes = fluxes / np.median(fluxes)
+
+            if np.std(fluxes) * 1e6 < flux_std:
+                info_message(f'{aper_width}x{aper_height}: '
+                             f'{np.std(fluxes)*1e6:0.0f} ppm')
+
+
 def setup_and_plot_GTC(mcmc_fit, plotName='',
                        varnames=None,
                        smoothingKernel=1,
@@ -43,25 +87,6 @@ def setup_and_plot_GTC(mcmc_fit, plotName='',
                     and 'le_edepth_0' not in key]
 
     samples = pm.trace_to_dataframe(trace, varnames=varnames)
-
-    # if square_edepth:
-    #     info_message('Converting the `edepth` from `r` to real `edepth`')
-    #     edepth_orig = samples['edepth'].copy()
-    #     positive = edepth_orig > 0
-    #     negative = edepth_orig < 0
-    #     samples['edepth'][positive] = np.sqrt(edepth_orig[positive])
-    #     samples['edepth'][negative] = -np.sqrt(edepth_orig[negative])
-    #     samples['edepth_orig'] = edepth_orig
-
-    #     med_edepth = np.median(samples['edepth'])
-    #     std_edepth = np.std(samples['edepth'])
-    #     sgn_edepth = np.sign(med_edepth)
-    #     map_soln['edepth'] = sgn_edepth * np.sqrt(abs(med_edepth))
-
-    #     med_edepth_orig = np.median(samples['edepth_orig'])
-    #     std_edepth_orig = np.std(samples['edepth_orig'])
-    #     sgn_edepth_orig = np.sign(med_edepth_orig)
-    #     map_soln['edepth_orig'] = med_edepth_orig
 
     varnames = [key for key in map_soln.keys()
                 if '__' not in key and 'light' not in key
@@ -116,10 +141,6 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
         # purposes
         pm.Deterministic("light_curves", light_curves)
 
-        # # In this line, we simulate the dataset that we will fit
-        # y = xo.eval_in_model(light_curve)
-        # y += yerr * np.random.randn(len(y))
-
         # The likelihood function assuming known Gaussian uncertainty
         pm.Normal("obs", mu=light_curve, sd=yerr, observed=data)
 
@@ -162,11 +183,6 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
         else:
             if allow_negative_edepths:
                 edepth = pm.Uniform("edepth", lower=-0.01, upper=0.01)
-                # edepth_sign = pm.math.sgn(edepth)
-                # if pm.math.lt(edepth_sign, 0):
-                #     edepth = -pm.math.sqrt(pm.math.abs_(edepth))
-                # else:
-                #     edepth = pm.math.sqrt(pm.math.abs_(edepth))
             else:
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
@@ -250,11 +266,6 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
         else:
             if allow_negative_edepths:
                 edepth = pm.Uniform("edepth", lower=-0.01, upper=0.01)
-                # edepth_sign = pm.math.sgn(edepth)
-                # if pm.math.lt(edepth_sign, 0):
-                #     edepth = -pm.math.sqrt(pm.math.abs_(edepth))
-                # else:
-                #     edepth = pm.math.sqrt(pm.math.abs_(edepth))
             else:
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
@@ -352,11 +363,6 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
         else:
             if allow_negative_edepths:
                 edepth = pm.Uniform("edepth", lower=-0.01, upper=0.01)
-                # pm.Deterministic('lt_edepth_0', pm.math.lt(edepth, 0.0))
-                # if pm.math.lt(edepth, 0.0):
-                #     edepth = -np.sqrt(abs(edepth))
-                # else:
-                #     edepth = np.sqrt(edepth)
             else:
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
@@ -418,7 +424,7 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
         if idx_rev is not None:
             pm.Deterministic(f"light_curves{strrev}", light_curves_rev)
 
-        # # The likelihood function assuming known Gaussian uncertainty
+        # The likelihood function assuming known Gaussian uncertainty
         pm.Normal(f"obs{strfwd}", mu=light_curve_fwd + line_fwd,
                   sd=yerr[idx_fwd], observed=data[idx_fwd])
 
@@ -1156,10 +1162,287 @@ from astropy.modeling.fitting import LinearLSQFitter
 from matplotlib import pyplot as plt
 
 
-def fit_2D_time_vs_other(times, flux, other, idx_fwd, idx_rev,
-                         xytext=(15, 15), n_sig=5, varname='Other',
-                         n_spaces=[10, 10], convert_to_ppm=True,
-                         lw=3, fontsize=10, fig=None, ax=None):
+def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
+                      use_idx_fwd_, use_xcenters_, use_ycenters_,
+                      use_trace_angles_, use_trace_lengths_):
+    ppm = 1e6
+
+    phots = planet.normed_photometry_df[aper_column].values
+    uncs = planet.normed_uncertainty_df[aper_column].values
+
+    n_pts = len(phots)
+
+    # 2 == eclipse depth + mean
+    n_params = (2 + use_idx_fwd_ + use_xcenters_ + use_ycenters_ +
+                use_trace_angles_ + use_trace_lengths_)
+
+    if 'mean_fwd' not in map_soln.keys():
+        map_model = map_soln['light_curves'].flatten() + map_soln['line_model']
+    else:
+        map_model = np.zeros_like(planet.times)
+        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten() + \
+            map_soln['line_model_fwd']
+        map_model[idx_rev] = map_soln['light_curves_rev'].flatten() + \
+            map_soln['line_model_rev']
+
+        # if we split Fwd/Rev, then there are now 2 means
+        n_params = n_params + 1
+
+    correction = 2 * n_params * (n_params + 1) / (n_pts - n_params - 1)
+
+    sdnr_ = np.std(map_model - phots) * ppm
+    chisq_ = np.sum((map_model - phots)**2 / uncs**2)
+    aic_ = chisq_ + 2 * n_params + correction
+    bic_ = chisq_ + n_params * np.log10(n_pts)
+
+    return chisq_, aic_, bic_, sdnr_
+
+
+def extract_map_only_data(planet, idx_fwd, idx_rev,
+                          maps_only_filename=None,
+                          data_dir='notebooks'):
+
+    if maps_only_filename is None:
+        maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
+        maps_only_filename = os.path.join(data_dir, maps_only_filename)
+
+    info_message('Loading Decorrelation Results for MAPS only Results')
+    decor_span_MAPs = joblib.load(maps_only_filename)
+    decor_aper_columns_list = list(decor_span_MAPs.keys())
+
+    n_apers = len(decor_span_MAPs)
+
+    aper_widths = []
+    aper_heights = []
+    idx_split = []
+    use_xcenters = []
+    use_ycenters = []
+    use_trace_angles = []
+    use_trace_lengths = []
+
+    sdnr_apers = []
+    chisq_apers = []
+    aic_apers = []
+    bic_apers = []
+    res_std_ppm = []
+    phots_std_ppm = []
+    res_diff_ppm = []
+    keys_list = []
+
+    n_pts = len(planet.normed_photometry_df)
+
+    map_solns = {}
+    fine_grain_mcmcs_s = {}
+    generator = enumerate(decor_span_MAPs.items())
+    for m, (aper_column, map_results) in tqdm(generator, total=n_apers):
+        if aper_column in ['xcenter', 'ycenter']:
+            continue
+
+        n_results_ = len(map_results)
+        for map_result in map_results:
+
+            aper_width_, aper_height_ = np.int32(
+                aper_column.split('_')[-1].split('x'))
+
+            aper_widths.append(aper_width_)
+            aper_heights.append(aper_height_)
+
+            idx_split.append(map_result[0])
+            use_xcenters.append(map_result[2])
+            use_ycenters.append(map_result[3])
+            use_trace_angles.append(map_result[4])
+            use_trace_lengths.append(map_result[5])
+
+            fine_grain_mcmcs_ = map_result[6]
+            map_soln_ = map_result[7]
+
+            res_std_ppm.append(map_result[8])
+            phots_std_ppm.append(map_result[9])
+            res_diff_ppm.append(map_result[10])
+
+            key = (f'aper_column:{aper_column}-'
+                   f'idx_split:{idx_split[-1]}-'
+                   f'_use_xcenters:{use_xcenters[-1]}-'
+                   f'_use_ycenters:{use_ycenters[-1]}-'
+                   f'_use_trace_angles:{use_trace_angles[-1]}-'
+                   f'_use_trace_lengths:{use_trace_lengths[-1]}')
+
+            keys_list.append(key)
+            fine_grain_mcmcs_s[key] = fine_grain_mcmcs_
+            map_solns[key] = map_soln_
+
+            chisq_, aic_, bic_, sdnr_ = compute_chisq_aic(
+                planet,
+                aper_column,
+                map_soln_,
+                idx_fwd,
+                idx_rev,
+                idx_split[-1],
+                use_xcenters[-1],
+                use_ycenters[-1],
+                use_trace_angles[-1],
+                use_trace_lengths[-1])
+
+            sdnr_apers.append(sdnr_)
+            chisq_apers.append(chisq_)
+            aic_apers.append(aic_)
+            bic_apers.append(bic_)
+
+    aper_widths = np.array(aper_widths)
+    aper_heights = np.array(aper_heights)
+    idx_split = np.array(idx_split)
+    use_xcenters = np.array(use_xcenters)
+    use_ycenters = np.array(use_ycenters)
+    use_trace_angles = np.array(use_trace_angles)
+    use_trace_lengths = np.array(use_trace_lengths)
+
+    sdnr_apers = np.array(sdnr_apers)
+    chisq_apers = np.array(chisq_apers)
+    aic_apers = np.array(aic_apers)
+    bic_apers = np.array(bic_apers)
+    res_std_ppm = np.array(res_std_ppm)
+    phots_std_ppm = np.array(phots_std_ppm)
+    res_diff_ppm = np.array(res_diff_ppm)
+    keys_list = np.array(keys_list)
+
+    return (decor_span_MAPs, keys_list, aper_widths, aper_heights,
+            idx_split, use_xcenters, use_ycenters,
+            use_trace_angles, use_trace_lengths,
+            fine_grain_mcmcs_s, map_solns,
+            res_std_ppm, phots_std_ppm, res_diff_ppm,
+            sdnr_apers, chisq_apers, aic_apers, bic_apers)
+
+
+def create_sub_sect(n_options, idx_split, use_xcenters, use_ycenters,
+                    use_trace_angles, use_trace_lengths,
+                    idx_split_, use_xcenters_, use_ycenters_,
+                    use_trace_angles_, use_trace_lengths_):
+
+    sub_sect = np.ones(n_options).astype(bool)
+    _idx_split = idx_split == idx_split_
+    _use_xcenters = use_xcenters == use_xcenters_
+    _use_ycenters = use_ycenters == use_ycenters_
+    _use_trace_angles = use_trace_angles == use_trace_angles_
+    _use_tracelengths = use_trace_lengths == use_trace_lengths_
+
+    sub_sect = np.bitwise_and(sub_sect, _idx_split)
+    sub_sect = np.bitwise_and(sub_sect, _use_xcenters)
+    sub_sect = np.bitwise_and(sub_sect, _use_ycenters)
+    sub_sect = np.bitwise_and(sub_sect, _use_trace_angles)
+    sub_sect = np.bitwise_and(sub_sect, _use_tracelengths)
+
+    return np.where(sub_sect)[0]
+
+
+def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
+                                   use_ycenters, use_trace_angles,
+                                   use_trace_lengths, res_std_ppm,
+                                   sdnr_apers, chisq_apers,
+                                   aic_apers, bic_apers,
+                                   aper_widths,
+                                   aper_heights,
+                                   idx_split_, use_xcenters_, use_ycenters_,
+                                   use_trace_angles_, use_trace_lengths_):
+
+    sub_sect = create_sub_sect(n_options,
+                               idx_split,
+                               use_xcenters,
+                               use_ycenters,
+                               use_trace_angles,
+                               use_trace_lengths,
+                               idx_split_,
+                               use_xcenters_,
+                               use_ycenters_,
+                               use_trace_angles_,
+                               use_trace_lengths_)
+
+    aper_widths_sub = aper_widths[sub_sect]
+    aper_heights_sub = aper_heights[sub_sect]
+
+    argbest_ppm = res_std_ppm[sub_sect].argmin()
+
+    best_ppm_sub = res_std_ppm[sub_sect][argbest_ppm]
+    best_sdnr_sub = sdnr_apers[sub_sect][argbest_ppm]
+    best_chisq_sub = chisq_apers[sub_sect][argbest_ppm]
+    best_aic_sub = aic_apers[sub_sect][argbest_ppm]
+    width_best = aper_widths_sub[argbest_ppm]
+    height_best = aper_heights_sub[argbest_ppm]
+
+    sdnr_res_sub_min = sdnr_apers[sub_sect].min()
+    std_res_sub_min = res_std_ppm[sub_sect].min()
+    chisq_sub_min = chisq_apers[sub_sect].min()
+    aic_sub_min = aic_apers[sub_sect].min()
+
+    entry = {f'idx_split': idx_split_,
+              f'xcenters': use_xcenters_,
+              f'ycenters': use_ycenters_,
+              f'trace_angles': use_trace_angles_,
+              f'trace_lengths': use_trace_lengths_,
+              f'width_best': width_best,
+              f'height_best': height_best,
+              f'best_ppm_sub': best_ppm_sub,
+              f'best_sdnr_sub': best_sdnr_sub,
+              f'best_chisq_sub': best_chisq_sub,
+              f'best_aic_sub': best_aic_sub,
+              f'std_res_sub_min': std_res_sub_min,
+              f'sdnr_res_sub_min': sdnr_res_sub_min,
+              f'chisq_sub_min': chisq_sub_min,
+              f'aic_sub_min': aic_sub_min}
+
+    return entry
+
+
+def get_map_results_models(times, map_soln,
+                           idx_fwd, idx_rev):
+    if 'mean_fwd' not in map_soln.keys():
+        map_model = map_soln['light_curves'].flatten()
+        line_model = map_soln['line_model'].flatten()
+    else:
+        map_model = np.zeros_like(times)
+        line_model = np.zeros_like(times)
+        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten()
+        line_model[idx_fwd] = map_soln['line_model_fwd'].flatten()
+
+        map_model[idx_rev] = map_soln['light_curves_rev'].flatten()
+        line_model[idx_rev] = map_soln['line_model_rev'].flatten()
+
+    return map_model, line_model
+
+
+def create_results_df(aper_widths, aper_heights,
+                      res_std_ppm, sdnr_apers, chisq_apers,
+                      aic_apers, bic_apers, idx_split,
+                      use_xcenters, use_ycenters,
+                      use_trace_angles, use_trace_lengths):
+
+    n_options = len(aper_widths)
+    results_dict = {}
+    for idx_split_ in [True, False]:
+        for use_xcenters_ in [True, False]:
+            for use_ycenters_ in [True, False]:
+                for use_trace_angles_ in [True, False]:
+                    for use_trace_lengths_ in [True, False]:
+                        entry = organize_results_ppm_chisq_aic(
+                            n_options, idx_split, use_xcenters, use_ycenters,
+                            use_trace_angles, use_trace_lengths, res_std_ppm,
+                            sdnr_apers, chisq_apers, aic_apers, bic_apers,
+                            aper_widths, aper_heights,
+                            idx_split_, use_xcenters_, use_ycenters_,
+                            use_trace_angles_, use_trace_lengths_)
+
+                        for key, val in entry.items():
+                            if key not in results_dict.keys():
+                                results_dict[key] = []
+
+                            results_dict[key].append(val)
+
+    return pd.DataFrame(results_dict)
+
+
+def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
+                              xytext=(15, 15), n_sig=5, varname='Other',
+                              n_spaces=[10, 10], convert_to_ppm=True,
+                              lw=3, fontsize=10, fig=None, ax=None):
     ppm = 1e6
 
     if fig is None and ax is None:
