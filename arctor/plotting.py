@@ -634,7 +634,7 @@ def plot_ycenter_vs_flux(planet, aper_width, aper_height,
 def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                               xytext=(15, 15), n_sig=5, varname='Other',
                               n_spaces=[10, 10], convert_to_ppm=True,
-                              lw=3, fontsize=10, fig=None, ax=None):
+                              lw=3, fontsize=10, xlim=None, fig=None, ax=None):
     ppm = 1e6
 
     if fig is None and ax is None:
@@ -728,7 +728,11 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 fontsize=12,
                 )
 
-    ax.set_xlim(1.05 * min_o * other_std, 1.05 * max_o * other_std)
+    if xlim is None and len(xlim) == 2:
+        ax.set_xlim(1.05 * min_o * other_std, 1.05 * max_o * other_std)
+    else:
+        ax.set_xlim(xlim)
+
     ax.set_ylabel('Flux [ppm]')
     ax.set_xlabel(f'{varname} [Median Subtracted]')
     ax.legend(loc=0, fontsize=fontsize)
