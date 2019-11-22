@@ -1,5 +1,7 @@
 # https://stackoverflow.com/questions/45786714/custom-marker-edge-style-in-manual-legend
 
+from astropy.modeling.models import Planar2D, Linear1D
+from astropy.modeling.fitting import LinearLSQFitter
 from astropy.visualization import simple_norm
 from matplotlib import pyplot as plt
 from photutils import RectangularAperture

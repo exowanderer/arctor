@@ -1157,10 +1157,6 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
             fine_grain_mcmcs_with_w_xcenter_log_edepth_w_split
             ]
 
-from astropy.modeling.models import Planar2D, Linear1D
-from astropy.modeling.fitting import LinearLSQFitter
-from matplotlib import pyplot as plt
-
 
 def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
                       use_idx_fwd_, use_xcenters_, use_ycenters_,
