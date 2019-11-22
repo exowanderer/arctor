@@ -657,7 +657,6 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
 
     times_med = np.median(times[inliers])
     times_std = np.median(times[inliers])
-
     times_normed = (times - times_med) / times_std
 
     other_med = np.median(other[inliers])
