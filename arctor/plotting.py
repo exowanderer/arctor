@@ -629,6 +629,111 @@ def plot_ycenter_vs_flux(planet, aper_width, aper_height,
     return ax
 
 
+def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
+                              xytext=(15, 15), n_sig=5, varname='Other',
+                              n_spaces=[10, 10], convert_to_ppm=True,
+                              lw=3, fontsize=10, fig=None, ax=None):
+    ppm = 1e6
+
+    if fig is None and ax is None:
+        fig, ax = plt.subplots()
+
+    if ax is None:
+        ax = fig.add_subplot(111)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
+                      ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
+
+    fitter_o = LinearLSQFitter()
+    fitter_t = LinearLSQFitter()
+
+    model_o = Linear1D(slope=1e-6, intercept=np.median(flux))
+    model_t = Linear1D(slope=-1e-3, intercept=0)
+
+    times_med = np.median(times[inliers])
+    times_std = np.median(times[inliers])
+
+    times_normed = (times - times_med) / times_std
+
+    other_med = np.median(other[inliers])
+    other_std = np.median(other[inliers])
+    other_normed = (other - other_med) / other_std
+
+    flux_med = np.median(flux[inliers])
+    flux_std = np.median(flux[inliers])
+    flux_normed = (flux - flux_med) / flux_std
+
+    fit_t = fitter_t(model_t, times_normed[inliers], flux_normed[inliers])
+
+    flux_corrected = flux_normed - fit_t(times_normed)
+    fit_o = fitter_o(model_o, other_normed[inliers], flux_corrected[inliers])
+
+    model_comb = Planar2D(slope_x=fit_o.slope,
+                          slope_y=fit_t.slope,
+                          intercept=fit_t.intercept)
+
+    fit_comb = fitter_t(model_comb,
+                        other_normed[inliers],
+                        times_normed[inliers],
+                        flux_normed[inliers])
+
+    # annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
+    #               f't_slope:{fit_t.slope.value:0.2e}\n'
+    #               f'c_slope_o:{fit_comb.slope_x.value:0.2e}\n'
+    #               f'c_slope_t:{fit_comb.slope_y.value:0.2e}\n'
+    #               f'o_intcpt:{fit_o.intercept.value:0.2e}\n'
+    #               f't_intcpt:{fit_t.intercept.value:0.2e}\n'
+    #               f'c_intcpt:{fit_comb.intercept.value:0.2e}'
+    #               )
+
+    n_sp0, n_sp1 = n_spaces
+    annotation = (f'2D Slope {varname}: {fit_comb.slope_x.value:0.2e}\n'
+                  f'2D Slope Time:{" "*n_sp0}{fit_comb.slope_y.value:0.2e}\n'
+                  f'2D Intercept:{" "*(n_sp1)}'
+                  f'{fit_comb.intercept.value * flux_std * ppm:0.2f} [ppm]'
+                  )
+
+    min_o = other_normed.min()
+    max_o = other_normed.max()
+    min_t = times_normed.min()
+    max_t = times_normed.max()
+
+    ax.plot(other_normed[idx_fwd] * other_std,
+            flux_normed[idx_fwd] * flux_std * ppm,
+            'o', label='Forward Scan')
+    ax.plot(other_normed[idx_rev] * other_std,
+            flux_normed[idx_rev] * flux_std * ppm,
+            'o', label='Reverse Scan')
+
+    other_normed_th = np.linspace(2 * min_o, 2 * max_o, 100)
+    times_normed_th = np.linspace(2 * min_t, 2 * max_t, 100)
+
+    best_model = fit_comb(other_normed_th, times_normed_th)
+    ax.plot(other_normed_th * other_std, best_model * flux_std * ppm,
+            lw=lw, zorder=0)
+
+    ax.set_title(f'{varname} + Time 2D Fit to Flux')
+    ax.annotate(annotation,
+                (0, 0),
+                xycoords="axes fraction",
+                xytext=xytext,
+                textcoords="offset points",
+                ha="left",
+                va="bottom",
+                fontsize=12,
+                )
+
+    ax.set_xlim(1.05 * min_o * other_std, 1.05 * max_o * other_std)
+    ax.set_ylabel('Flux [ppm]')
+    ax.set_xlabel(f'{varname} [Median Subtracted]')
+    ax.legend(loc=0, fontsize=fontsize)
+
+    return fig, ax
+
+
 def plot_xcenter_vs_flux(planet, aper_width, aper_height,
                          use_time_sort=False, nSig=0.5, t0_base=0, size=50,
                          include_orbits=True, ax=None):
