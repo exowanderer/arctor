@@ -727,9 +727,10 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                 fontsize=12,
                 )
 
-    if xlim is None and len(xlim) == 2:
+    if xlim is None:
         ax.set_xlim(1.05 * min_o * other_std, 1.05 * max_o * other_std)
     else:
+        assert(len(xlim) == 2), "`xlim` must be a 2-tuple"
         ax.set_xlim(xlim)
 
     ax.set_ylabel('Flux [ppm]')
