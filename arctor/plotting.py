@@ -6,6 +6,9 @@ from astropy.visualization import simple_norm
 from matplotlib import pyplot as plt
 from photutils import RectangularAperture
 from tqdm import tqdm
+
+from scipy.special import erf
+from sklearn.neighbors import KernelDensity
 from statsmodels.robust import scale as sc
 
 import numpy as np
@@ -738,6 +741,109 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     ax.legend(loc=0, fontsize=fontsize)
 
     return fig, ax
+
+
+def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
+                                 n_edepths=1000, kernel='gaussian', lw=5,
+                                 bins=50, verbose=False, ax=None,
+                                 hist_color='C4', kde_color='C0',
+                                 kde_alpha=1.0, include_hist=True):
+
+    # spelled Frenchy on purpose
+    bleus = ('#1f77b4', '#52aae7', '#85ddff')
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.clear()
+
+    ppm = 1e6
+
+    edepths = mcmc_samples_df['edepth'].values
+
+    edepths_fake = np.r_[edepths,
+                         -(edepths - np.min(edepths)) + np.min(edepths)]
+
+    sigmas = erf(np.arange(1, 6) / np.sqrt(2))
+    percentiles = np.percentile(edepths * ppm, sigmas * 100)
+
+    if verbose:
+        for k, (sigma_, perc_) in enumerate(zip(sigmas, percentiles)):
+            print(f'{k+1}-sigma: {sigma_*100:0.5f}% - {perc_*1e6:0.1f} ppm')
+
+    edepths_med = np.median(edepths)
+    edepths_th_real = np.linspace(min_edepth, max_edepth, n_edepths)
+
+    # instantiate and fit the KDE model
+    kde = KernelDensity(bandwidth=1.0, kernel=kernel)
+    kde.fit((edepths_fake * ppm)[:, None])
+
+    # score_samples returns the log of the probability density
+    logprob = kde.score_samples(edepths_th_real[:, None])
+    kde_edepths_real_vals = np.exp(logprob)
+    max_kde_edepth = np.max(kde_edepths_real_vals)
+    edepths_mode = edepths_th_real[np.argmax(kde_edepths_real_vals)]
+
+    lbl_base = 'MCMC Posterior'
+    if include_hist:
+        yhist, _, _ = ax.hist(edepths * ppm, bins=bins, density=True,
+                              color=hist_color, zorder=-1, alpha=0.7,
+                              label=f'{kernel.capitalize()} {lbl_base}'
+                              ' Histogram')
+    else:
+        yhist, _ = np.histogram(edepths * ppm, bins=bins, density=True)
+
+        plt.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
+                         color='darkgrey')  # , alpha=kde_alpha)
+
+    last_perc = min_edepth
+    for color_, perc_ in zip(bleus, percentiles):
+        edepths_th_ = np.linspace(
+            last_perc, perc_, n_edepths // len(bleus))
+
+        logprob_ = kde.score_samples(edepths_th_[:, None])
+        kde_edepths_ = np.exp(logprob_)
+        plt.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
+                         color=color_, alpha=kde_alpha)
+
+        last_perc = perc_
+
+    plt.fill_between([], [], color=bleus[0], alpha=kde_alpha,
+                     label=f'{kernel.capitalize()} {lbl_base} KDE')
+
+    ax.axvline(edepths_mode, color='C1', ls='--', lw=lw)
+    annotation = f'{kernel.capitalize()} KDE Mode: {edepths_mode:0.0f} ppm'
+    ax.annotate(annotation,
+                xy=(edepths_mode + 1.0, 100 * 0.25 * max_kde_edepth),
+                rotation=90, color='C1', fontsize=30)
+
+    ax.plot([], [], color='C1', ls='-', lw=lw,
+            label=f'Mode {kernel.capitalize()} KDE-MCMC')
+
+    latex_sigma = r"$\sigma$"
+    for k, (sigma_, perc_) in enumerate(zip(sigmas, percentiles)):
+        # sigma_str = f'{k+1}-{latex_sigma}'
+        annotation = f'{perc_:0.0f} ppm'
+        ax.axvline(perc_, color='#555555', ls='--', lw=2)
+        ax.annotate(annotation, xy=(perc_ + 0.5, 100 * 0.8 * max_kde_edepth),
+                    rotation=90, color='#555555', fontsize=30)
+
+    ax.set_ylim(0, 100 * yhist.max() * 1.02)
+    ax.set_xlim(min_edepth, max_edepth)
+    ax.set_xlabel('Eclipse Depth [ppm]', fontsize=20)
+    ax.set_ylabel('Marginalized Posterior Probability [%]', fontsize=20)
+
+    ax.legend(loc=9, fontsize=20)
+
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+
+    for key, val in ax.spines.items():
+        val.set_visible(False)
+
+    return ax
 
 
 def plot_xcenter_vs_flux(planet, aper_width, aper_height,

@@ -208,3 +208,12 @@ if __name__ == '__main__':
     ax = plotting.plot_xcenter_vs_flux(
         planet, aper_width, aper_height,
         t0_base=0, ax=ax, size=100, include_orbits=False)
+
+if __name__ == '__main__':
+    kernels = ('gaussian', 'tophat', 'epanechnikov',
+               'exponential', 'linear', 'cosine')
+
+    # fig, ax = plt.subplots()
+
+    ax = plotting.plot_kde_with_BCR_annotation(
+        mcmc_samples_df, kernel=kernels[0], ax=ax)
