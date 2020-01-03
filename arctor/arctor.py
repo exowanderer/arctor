@@ -120,6 +120,30 @@ class Arctor(object):
 
         info_message(f'Cosmic Ray Mask Creation Took {time()-start} seconds')
 
+    def clean_cosmic_rays_temporal_idx_split(self, n_sig=5, window=7):
+        self.cosmic_rays = np.zeros_like(self.image_stack)
+        krows, kcols = np.indices((self.height, self.width))
+        start = time()
+        for krow in tqdm(range(self.width)):
+            for kcol in range(self.height):
+                # FORWARD Scan
+                val = self.image_stack[self.idx_fwd, kcol, krow]
+                val_Med = np.median(val)
+                val_Std = np.std(val)
+                mask = abs(val - val_Med) > n_sig * val_Std
+                self.cosmic_rays[self.idx_fwd, kcol, krow] = mask
+                self.image_stack[self.idx_fwd, kcol, krow][mask] = val_Med
+
+                # REVERSE Scan
+                val = self.image_stack[self.idx_rev, kcol, krow]
+                val_Med = np.median(val)
+                val_Std = np.std(val)
+                mask = abs(val - val_Med) > n_sig * val_Std
+                self.cosmic_rays[self.idx_rev, kcol, krow] = mask
+                self.image_stack[self.idx_rev, kcol, krow][mask] = val_Med
+
+        info_message(f'Cosmic Ray Mask Creation Took {time()-start} seconds')
+
     def clean_cosmic_rays_spatial(self, n_sig=5, window=7):
         self.cosmic_rays = np.zeros_like(self.image_stack)
         for k, image_ in tqdm(enumerate(self.image_stack),
