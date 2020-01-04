@@ -14,7 +14,6 @@ import pandas as pd
 import pygtc
 
 from arctor import Arctor
-from arctor.utils import fit_2D_time_vs_other
 from arctor.utils import extract_map_only_data, create_results_df
 from arctor.utils import setup_and_plot_GTC, info_message
 # from arctor.plotting import plot_32_subplots_for_each_feature
@@ -146,8 +145,8 @@ if __name__ == '__main__':
 
     plotName = ''
     smoothingKernel = 1
-    customLabelFont = {'rotation': 45, 'size': 20,
-                       'xlabelpad': 0, 'ylabelpad': 0}
+    customLabelFont = {'rotation': 45, 'size': 20}  # ,
+    # 'xlabelpad': 0, 'ylabelpad': 0}
 
     pygtc.plotGTC(mcmc_samples_df,
                   plotName=plotName,
@@ -162,6 +161,22 @@ if __name__ == '__main__':
     fig, ax = plt.subplots()
     aper_width_bic_best = 13
     aper_height_bic_best = 45
+
+    eclipse_depths = [45, 100]
+    ax = plotting.plot_set_of_models(planet, best_mcmc_params,
+                                     eclipse_depths, wasp43,
+                                     aper_column='aperture_sum_13x45',
+                                     n_pts_th=1000, t0_base=t0_guess,
+                                     plot_raw=True, ax=ax)
+
+    ax = plotting.plot_best_aic_light_curve(
+        planet, map_solns,
+        decor_results_df, mcmc_samples_df,
+        aic_apers,  keys_list,
+        aic_thresh=2, t0_base=t0_guess,
+        plot_many=False, plot_raw=True,
+        ax=ax)
+
     ax = plotting.plot_raw_light_curve(planet,
                                        aper_width_bic_best,
                                        aper_height_bic_best,

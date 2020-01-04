@@ -187,9 +187,9 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
 
-        slope = pm.Uniform("slope", lower=-0.1, upper=0.1)
-        line_fwd = mean_fwd + slope * times_bg[idx_fwd]
-        line_rev = mean_rev + slope * times_bg[idx_rev]
+        slope_time = pm.Uniform("slope_time", lower=-0.1, upper=0.1)
+        line_fwd = mean_fwd + slope_time * times_bg[idx_fwd]
+        line_rev = mean_rev + slope_time * times_bg[idx_rev]
 
         if xcenters is not None:
             slope_xc = pm.Uniform("slope_xcenter", lower=-0.1, upper=0.1)
@@ -270,8 +270,8 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
 
-        slope = pm.Uniform("slope", lower=-0.1, upper=0.1)
-        line = mean + slope * times_bg
+        slope_time = pm.Uniform("slope_time", lower=-0.1, upper=0.1)
+        line = mean + slope_time * times_bg
 
         if xcenters is not None:
             slope_xc = pm.Uniform("slope_xcenter", lower=-0.1, upper=0.1)
@@ -304,7 +304,7 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
         info_message(f'map_soln_edepth:{map_soln_edepth*1e6}')
 
         line_map_soln = (map_soln['mean'] +
-                         map_soln['slope'] * times_bg.flatten())
+                         map_soln['slope_time'] * times_bg.flatten())
         if xcenters is not None:
             line_map_soln = line_map_soln + \
                 map_soln['slope_xcenter'] * xcenters
@@ -367,33 +367,37 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
                 edepth = pm.Uniform("edepth", lower=0, upper=0.01)
                 edepth = pm.math.sqrt(edepth)
 
-        slope = pm.Uniform("slope", lower=-1, upper=1)
-        line_fwd = mean_fwd + slope * times_bg[idx_fwd]
+        slope_time = pm.Uniform("slope_time", lower=-1, upper=1)
+        line_fwd = mean_fwd + slope_time * times_bg[idx_fwd]
 
         if idx_rev is not None:
-            line_rev = mean_rev + slope * times_bg[idx_rev]
+            line_rev = mean_rev + slope_time * times_bg[idx_rev]
 
         if xcenters is not None:
             slope_xc = pm.Uniform("slope_xcenter", lower=-1, upper=1)
             line_fwd = line_fwd + slope_xc * xcenters[idx_fwd]
+
             if idx_rev is not None:
                 line_rev = line_rev + slope_xc * xcenters[idx_rev]
 
         if ycenters is not None:
             slope_yc = pm.Uniform("slope_ycenter", lower=-1, upper=1)
             line_fwd = line_fwd + slope_yc * ycenters[idx_fwd]
+
             if idx_rev is not None:
                 line_rev = line_rev + slope_yc * ycenters[idx_rev]
 
         if trace_angles is not None:
             slope_ta = pm.Uniform("slope_trace_angle", lower=-1, upper=1)
             line_fwd = line_fwd + slope_ta * trace_angles[idx_fwd]
+
             if idx_rev is not None:
                 line_rev = line_rev + slope_ta * trace_angles[idx_rev]
 
         if trace_lengths is not None:
             slope_tl = pm.Uniform("slope_trace_length", lower=-1, upper=1)
             line_fwd = line_fwd + slope_tl * trace_lengths[idx_fwd]
+
             if idx_rev is not None:
                 line_rev = line_rev + slope_tl * trace_lengths[idx_rev]
 
@@ -1388,8 +1392,7 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
     return entry
 
 
-def get_map_results_models(times, map_soln,
-                           idx_fwd, idx_rev):
+def get_map_results_models(times, map_soln, idx_fwd, idx_rev):
     if 'mean_fwd' not in map_soln.keys():
         map_model = map_soln['light_curves'].flatten()
         line_model = map_soln['line_model'].flatten()
