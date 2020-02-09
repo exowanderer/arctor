@@ -14,7 +14,7 @@ import pandas as pd
 import pygtc
 
 from arctor import Arctor
-from arctor.utils import fit_2D_time_vs_other
+# from arctor.utils import fit_2D_time_vs_other
 from arctor.utils import extract_map_only_data, create_results_df
 from arctor.utils import setup_and_plot_GTC, info_message
 # from arctor.plotting import plot_32_subplots_for_each_feature
@@ -28,11 +28,15 @@ if __name__ == '__main__':
 
     HOME = os.environ['HOME']
 
+    aper_width_bic_best = 13
+    aper_height_bic_best = 45
+
     plot_verbose = False
     save_now = False
     planet_name = 'WASP43'
     file_type = 'flt.fits'
 
+    # Identify where the stored MAP solns and MCMC posteriors are
     core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
 
     if not os.path.exists(core_dir):
@@ -124,12 +128,29 @@ if __name__ == '__main__':
     # mcmc_samples.to_csv(mcmc_samples_fname, index=False)
 
     mcmc_samples_df = pd.read_csv(mcmc_samples_fname)
+
+    # best = [False, True, True, True, False, True]
+    toggle_idx_split = False
+    toggle_xcenters = True
+    toggle_ycenters = True
+    toggle_trace_angles = False
+    toggle_trace_lengths = True
+
+    map_soln_key = 'aper_column:aperture_sum_'
+    map_soln_key = f'{map_soln_key}{aper_width_bic_best}'
+    map_soln_key = f'{map_soln_key}x{aper_height_bic_best}'
+    map_soln_key = f'{map_soln_key}-idx_split:{toggle_idx_split}'
+    map_soln_key = f'{map_soln_key}-_use_xcenters:{toggle_xcenters}'
+    map_soln_key = f'{map_soln_key}-_use_ycenters:{toggle_ycenters}'
+    map_soln_key = f'{map_soln_key}-_use_trace_angles:{toggle_trace_angles}'
+    map_soln_key = f'{map_soln_key}-_use_trace_lengths:{toggle_trace_lengths}'
+
+    map_soln = map_solns[map_soln_key]
+
     varnames = mcmc_samples_df.columns
     # varnames = [key for key in map_soln.keys()
     #             if '__' not in key and 'light' not in key
     #             and 'line' not in key and 'le_edepth_0' not in key]
-
-    # best = [False, True, True, True, False, True]
 
     # for k, thingy in enumerate(mcmc_13x45['aperture_sum_13x45']):
     #     isit = True
@@ -146,8 +167,8 @@ if __name__ == '__main__':
 
     plotName = ''
     smoothingKernel = 1
-    customLabelFont = {'rotation': 45, 'size': 20,
-                       'xlabelpad': 0, 'ylabelpad': 0}
+    customLabelFont = {'rotation': 45, 'size': 20}  # ,
+    # 'xlabelpad': 0, 'ylabelpad': 0}
 
     pygtc.plotGTC(mcmc_samples_df,
                   plotName=plotName,
@@ -160,8 +181,6 @@ if __name__ == '__main__':
                   )
 
     fig, ax = plt.subplots()
-    aper_width_bic_best = 13
-    aper_height_bic_best = 45
     ax = plotting.plot_raw_light_curve(planet,
                                        aper_width_bic_best,
                                        aper_height_bic_best,
@@ -170,7 +189,7 @@ if __name__ == '__main__':
 
     ax = plotting.plot_best_aic_light_curve(
         planet, map_solns,
-        decor_results_df, mcmc_samples_df,
+        decor_results_df,  # mcmc_samples_df,
         aic_apers,  keys_list,
         aic_thresh=2, t0_base=t0_guess,
         plot_many=False, plot_raw=True,
@@ -209,7 +228,6 @@ if __name__ == '__main__':
         planet, aper_width, aper_height,
         t0_base=0, ax=ax, size=100, include_orbits=False)
 
-if __name__ == '__main__':
     kernels = ('gaussian', 'tophat', 'epanechnikov',
                'exponential', 'linear', 'cosine')
 

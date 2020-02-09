@@ -884,7 +884,7 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
 
 
 def plot_best_aic_light_curve(planet, map_solns,
-                              decor_results_df, mcmc_samples_df,
+                              decor_results_df,  # mcmc_samples_df,
                               aic_apers,  keys_list,
                               aic_thresh=2, t0_base=0,
                               plot_many=False, plot_raw=False,
