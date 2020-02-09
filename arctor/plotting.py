@@ -11,6 +11,7 @@ from scipy.special import erf
 from sklearn.neighbors import KernelDensity
 from statsmodels.robust import scale as sc
 
+import exoplanet as xo
 import numpy as np
 import pandas as pd
 
@@ -946,8 +947,7 @@ def plot_best_aic_light_curve(planet, map_solns,
                zorder=-1, label='Null Hypothesis')
 
     if plot_raw:
-        phots_med = np.median(phots)
-        phots_med_sub = phots - phots_med
+        phots_med_sub = phots - np.median(phots)
         ax.plot(times[idx_fwd], phots_med_sub[idx_fwd] * ppm, 'o',
                 color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
         ax.plot(times[idx_rev], phots_med_sub[idx_rev] * ppm, 'o',
@@ -1017,6 +1017,139 @@ def plot_best_aic_light_curve(planet, map_solns,
                     color='pink', lw=3, alpha=0.05, zorder=-1)
 
     plt.show()
+
+    return ax
+
+
+def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
+                                    xcenters=None, ycenters=None,
+                                    trace_angles=None, trace_lengths=None,
+                                    times_th=None, eclipse_depth=None):
+
+    times_bg = times - np.median(times)
+
+    mean = mcmc_params['mean']
+    slope_time = mcmc_params['slope_time']
+
+    line_model = mean + slope_time * times_bg
+
+    if 'slope_xcenter' in mcmc_params and xcenters is not None:
+        slope_xc = mcmc_params['slope_xcenter']
+        line_model = line_model + slope_xc * xcenters
+
+    if 'slope_ycenter' in mcmc_params and ycenters is not None:
+        slope_yc = mcmc_params['slope_ycenter']
+        line_model = line_model + slope_yc * ycenters
+
+    if 'slope_trace_angle' in mcmc_params and trace_angles is not None:
+        slope_ta = mcmc_params['slope_trace_angle']
+        line_model = line_model + slope_ta * trace_angles
+
+    if 'slope_trace_length' in mcmc_params and trace_lengths is not None:
+        slope_tl = mcmc_params['slope_trace_length']
+        line_model = line_model + slope_tl * trace_lengths
+
+    if times_th is not None:
+        times = times_th.copy()
+
+    if eclipse_depth is not None:
+        edepth = np.sqrt(eclipse_depth)
+    else:
+        edepth = np.sqrt(mcmc_params['edepth'])
+
+    # Set up a Keplerian orbit for the planets
+    orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
+
+    # # Compute the model light curve using starry
+    star = xo.LimbDarkLightCurve(u)
+    eclipse_model = star.get_light_curve(orbit=orbit, r=edepth, t=times).eval()
+
+    return eclipse_model, line_model
+
+
+def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
+                       aper_column, n_pts_th=int(1e5), t0_base=0,
+                       limb_dark=[0], plot_raw=False, ax=None):
+    ppm = 1e6
+
+    idx_fwd = planet.idx_fwd
+    idx_rev = planet.idx_rev
+    times = planet.times
+    times_th = np.linspace(times.min(), times.max(), n_pts_th)
+
+    period = planet_params.orbital_period
+    t0 = t0_base
+    b = planet_params.impact_parameter
+    u = limb_dark
+
+    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
+    ycenters = planet.trace_ycenters - np.median(planet.trace_ycenters)
+    trace_angles = planet.trace_angles - np.median(planet.trace_angles)
+    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+
+    eclipse_model, line_model = compute_line_and_eclipse_models(
+        mcmc_params, times, t0, u, period, b,
+        xcenters=xcenters, ycenters=ycenters,
+        trace_angles=trace_angles, trace_lengths=trace_lengths,
+        times_th=times_th, eclipse_depth=None)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.clear()
+    phots = planet.normed_photometry_df[aper_column].values.copy()
+    uncs = planet.normed_uncertainty_df[aper_column].values.copy()
+
+    # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
+    # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
+    phots_corrected = (phots - line_model)
+    min_corrected = (phots_corrected.min() - 1.1 * np.max(uncs)) * ppm
+    max_corrected = (phots_corrected.max() + 1.1 * np.max(uncs)) * ppm
+
+    ax.errorbar(times[idx_fwd] - t0_base,
+                phots_corrected[idx_fwd] * ppm,
+                uncs[idx_fwd] * ppm, label='Forward Scan',
+                fmt='o', color='C0', ms=10, zorder=10)
+
+    ax.errorbar(times[idx_rev] - t0_base,
+                phots_corrected[idx_rev] * ppm,
+                uncs[idx_rev] * ppm, label='Reverse Scan',
+                fmt='o', color='C1', ms=10, zorder=10)
+
+    ax.plot(times_th - t0_base, eclipse_model * ppm,
+            label='Best Fit Model', color='C3', lw=5, zorder=5)
+
+    for label, (edepth, linestyle) in eclipse_depths.items():
+        eclipse_model_, _ = compute_line_and_eclipse_models(
+            mcmc_params, times, t0, u, period, b,
+            xcenters=xcenters, ycenters=ycenters,
+            trace_angles=trace_angles, trace_lengths=trace_lengths,
+            times_th=times_th, eclipse_depth=edepth)
+
+        ax.plot(times_th - t0_base, eclipse_model_ * ppm,
+                label=label, color='C7', lw=5, zorder=5, ls=linestyle)
+
+    ax.axhline(0.0, ls='--', color='k', lw=4,
+               zorder=-1, label='Null Hypothesis')
+
+    if plot_raw:
+        phots_med_sub = phots - np.median(phots)
+        ax.plot(times[idx_fwd] - t0_base, phots_med_sub[idx_fwd] * ppm, 'o',
+                color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
+        ax.plot(times[idx_rev] - t0_base, phots_med_sub[idx_rev] * ppm, 'o',
+                color='darkorange', ms=10, zorder=0, alpha=0.2, mew=0)
+
+    ax.set_ylim(min_corrected, max_corrected)
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
+
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label.set_fontsize(15)
+
+    ax.legend(loc=0, fontsize=15)
 
     return ax
 
