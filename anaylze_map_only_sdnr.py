@@ -158,20 +158,25 @@ if __name__ == '__main__':
                   figureSize='APJ_page'
                   )
 
-    fig, ax = plt.subplots()
     aper_width_bic_best = 13
     aper_height_bic_best = 45
 
-    eclipse_depths = [45, 100]
+    ppm = 1e6
+
+    # Values from L.C. Mayorga predictions
+    eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
+                      'fsed=0.1': [96.379104 / ppm, ':']}
+    aper_column = 'aperture_sum_13x45'
+    fig, ax = plt.subplots()
     ax = plotting.plot_set_of_models(planet, best_mcmc_params,
                                      eclipse_depths, wasp43,
-                                     aper_column='aperture_sum_13x45',
+                                     aper_column=aper_column,
                                      n_pts_th=1000, t0_base=t0_guess,
                                      plot_raw=True, ax=ax)
 
     ax = plotting.plot_best_aic_light_curve(
         planet, map_solns,
-        decor_results_df, mcmc_samples_df,
+        decor_results_df,  # mcmc_samples_df,
         aic_apers,  keys_list,
         aic_thresh=2, t0_base=t0_guess,
         plot_many=False, plot_raw=True,
@@ -185,7 +190,7 @@ if __name__ == '__main__':
 
     ax = plotting.plot_best_aic_light_curve(
         planet, map_solns,
-        decor_results_df, mcmc_samples_df,
+        decor_results_df,  # mcmc_samples_df,
         aic_apers,  keys_list,
         aic_thresh=2, t0_base=t0_guess,
         plot_many=False, plot_raw=True,

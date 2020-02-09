@@ -885,7 +885,7 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
 
 
 def plot_best_aic_light_curve(planet, map_solns,
-                              decor_results_df, mcmc_samples_df,
+                              decor_results_df,  # mcmc_samples_df,
                               aic_apers,  keys_list,
                               aic_thresh=2, t0_base=0,
                               plot_many=False, plot_raw=False,
@@ -947,8 +947,7 @@ def plot_best_aic_light_curve(planet, map_solns,
                zorder=-1, label='Null Hypothesis')
 
     if plot_raw:
-        phots_med = np.median(phots)
-        phots_med_sub = phots - phots_med
+        phots_med_sub = phots - np.median(phots)
         ax.plot(times[idx_fwd], phots_med_sub[idx_fwd] * ppm, 'o',
                 color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
         ax.plot(times[idx_rev], phots_med_sub[idx_rev] * ppm, 'o',
@@ -1083,20 +1082,29 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
     b = planet_params.impact_parameter
     u = limb_dark
 
+    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
+    ycenters = planet.trace_ycenters - np.median(planet.trace_ycenters)
+    trace_angles = planet.trace_angles - np.median(planet.trace_angles)
+    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+
     eclipse_model, line_model = compute_line_and_eclipse_models(
         mcmc_params, times, t0, u, period, b,
-        xcenters=None, ycenters=None,
-        trace_angles=None, trace_lengths=None,
+        xcenters=xcenters, ycenters=ycenters,
+        trace_angles=trace_angles, trace_lengths=trace_lengths,
         times_th=times_th, eclipse_depth=None)
 
     if ax is None:
         fig, ax = plt.subplots()
 
     ax.clear()
-    phots = planet.normed_photometry_df[aper_column].values
-    uncs = planet.normed_uncertainty_df[aper_column].values
+    phots = planet.normed_photometry_df[aper_column].values.copy()
+    uncs = planet.normed_uncertainty_df[aper_column].values.copy()
 
+    # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
+    # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
     phots_corrected = (phots - line_model)
+    min_corrected = (phots_corrected.min() - 1.1 * np.max(uncs)) * ppm
+    max_corrected = (phots_corrected.max() + 1.1 * np.max(uncs)) * ppm
 
     ax.errorbar(times[idx_fwd] - t0_base,
                 phots_corrected[idx_fwd] * ppm,
@@ -1109,29 +1117,29 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
                 fmt='o', color='C1', ms=10, zorder=10)
 
     ax.plot(times_th - t0_base, eclipse_model * ppm,
-            label='Best Fit Model', color='C7', lw=3, zorder=5)
+            label='Best Fit Model', color='C3', lw=5, zorder=5)
 
-    for edepth in eclipse_depths:
+    for label, (edepth, linestyle) in eclipse_depths.items():
         eclipse_model_, _ = compute_line_and_eclipse_models(
             mcmc_params, times, t0, u, period, b,
-            xcenters=None, ycenters=None,
-            trace_angles=None, trace_lengths=None,
+            xcenters=xcenters, ycenters=ycenters,
+            trace_angles=trace_angles, trace_lengths=trace_lengths,
             times_th=times_th, eclipse_depth=edepth)
 
         ax.plot(times_th - t0_base, eclipse_model_ * ppm,
-                label='Best Fit Model', color='C7', lw=3, zorder=5)
+                label=label, color='C7', lw=5, zorder=5, ls=linestyle)
 
-    ax.axhline(0.0, ls='--', color='k', lw=2,
+    ax.axhline(0.0, ls='--', color='k', lw=4,
                zorder=-1, label='Null Hypothesis')
 
     if plot_raw:
-        phots_med = np.median(phots)
-        phots_med_sub = phots - phots_med
+        phots_med_sub = phots - np.median(phots)
         ax.plot(times[idx_fwd] - t0_base, phots_med_sub[idx_fwd] * ppm, 'o',
                 color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
         ax.plot(times[idx_rev] - t0_base, phots_med_sub[idx_rev] * ppm, 'o',
                 color='darkorange', ms=10, zorder=0, alpha=0.2, mew=0)
 
+    ax.set_ylim(min_corrected, max_corrected)
     ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
     ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
 
