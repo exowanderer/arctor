@@ -32,6 +32,9 @@ if __name__ == '__main__':
     planet_name = 'WASP43'
     file_type = 'flt.fits'
 
+    aper_width_bic_best = 13
+    aper_height_bic_best = 45
+
     core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
 
     if not os.path.exists(core_dir):
@@ -123,6 +126,25 @@ if __name__ == '__main__':
     # mcmc_samples.to_csv(mcmc_samples_fname, index=False)
 
     mcmc_samples_df = pd.read_csv(mcmc_samples_fname)
+
+    # best = [False, True, True, True, False, True]
+    toggle_idx_split = False
+    toggle_xcenters = True
+    toggle_ycenters = True
+    toggle_trace_angles = False
+    toggle_trace_lengths = True
+
+    map_soln_key = 'aper_column:aperture_sum_'
+    map_soln_key = f'{map_soln_key}{aper_width_bic_best}'
+    map_soln_key = f'{map_soln_key}x{aper_height_bic_best}'
+    map_soln_key = f'{map_soln_key}-idx_split:{toggle_idx_split}'
+    map_soln_key = f'{map_soln_key}-_use_xcenters:{toggle_xcenters}'
+    map_soln_key = f'{map_soln_key}-_use_ycenters:{toggle_ycenters}'
+    map_soln_key = f'{map_soln_key}-_use_trace_angles:{toggle_trace_angles}'
+    map_soln_key = f'{map_soln_key}-_use_trace_lengths:{toggle_trace_lengths}'
+
+    map_soln = map_solns[map_soln_key]
+
     varnames = mcmc_samples_df.columns
     # varnames = [key for key in map_soln.keys()
     #             if '__' not in key and 'light' not in key
@@ -157,9 +179,6 @@ if __name__ == '__main__':
                   nContourLevels=3,
                   figureSize='APJ_page'
                   )
-
-    aper_width_bic_best = 13
-    aper_height_bic_best = 45
 
     ppm = 1e6
 
