@@ -1527,9 +1527,10 @@ def plot_lightcurve(planet, aper_width, aper_height,
 
 
 def add_arrows(n_pixels, x, y, dx, dy, ax,
-               rotate=False, color='white', ann_fontsize=30):
+               rotation=None, color='white', ann_fontsize=30):
 
-    rotation = 90 if rotate else 0
+    rotate = rotation is not None
+    rotation = rotation if rotation is not None else 0
 
     ax.annotate(f'{n_pixels} Pixels',
                 (0, 0),
@@ -1551,29 +1552,32 @@ def add_arrows(n_pixels, x, y, dx, dy, ax,
     if dx is None or dy is None:
         return ax
 
-    x_0 = x + 6 if rotate else x + 90
-    y_0 = y + 90 if rotate else y + 8
+    x_0 = x + 8 if rotate else x + 110
+    y_0 = y + 110 if rotate else y + 12
     plt.arrow(x_0, y_0, dx, dy,
               head_width=max_head_width, head_length=max_head_length,
               color=color, lw=5, )
 
-    x_1 = x + 6 if rotate else x - 10
-    y_1 = y - 10 if rotate else y + 8
+    x_1 = x + 8 if rotate else x - 10
+    y_1 = y - 10 if rotate else y + 10
     plt.arrow(x_1, y_1, -dx, -dy,
               head_width=max_head_width, head_length=max_head_length,
               color=color, lw=5)
+
     return ax
 
 
 def plot_apertures(image, aperture,
                    inner_annular=None,
                    outer_annular=None,
-                   lw=5, ann_fontsize=30, ax=None):
+                   lw=5, ann_fontsize=25, ax=None):
 
     norm = simple_norm(image, 'sqrt', percent=99)
 
     if ax is not None:
         ax.clear()
+    else:
+        fig, ax = plt.subplots()
 
     plt.imshow(image, norm=norm, origin='lower')
 
@@ -1600,7 +1604,7 @@ def plot_apertures(image, aperture,
 
     # Frame Size
     # Top label + arrow
-    x951 = 951 // 2 - 40
+    x951 = 951 // 2 - 50
     y951 = 380
     dx951 = 350
     dy951 = 0
@@ -1610,19 +1614,19 @@ def plot_apertures(image, aperture,
 
     # Left label + arrow
     x400 = 10
-    y400 = 400 // 2 - 40
+    y400 = 400 // 2 - 70
     dx400 = 0
     dy400 = 100
 
     ax = add_arrows(n_pixels=400, x=x400, y=y400, dx=dx400, dy=dy400,
                     color='lightgreen', ann_fontsize=ann_fontsize, ax=ax,
-                    rotate=True)
+                    rotation=90)
 
     # Outer Annular Size
     # Top label + arrow
-    x767 = 951 // 2 - 40
-    y767 = 357
-    dx767 = 225
+    x767 = 951 // 2 - 50
+    y767 = 10
+    dx767 = 200
     dy767 = 0
 
     ax = add_arrows(n_pixels=767, x=x767, y=y767, dx=dx767, dy=dy767,
@@ -1630,19 +1634,19 @@ def plot_apertures(image, aperture,
 
     # Left label + arrow
     x350 = 145
-    y350 = 400 // 2 - 60
+    y350 = 400 // 2 - 70
     dx350 = 0
-    dy350 = 100
+    dy350 = 75
 
     ax = add_arrows(n_pixels=350, x=x350, y=y350, dx=dx350, dy=dy350,
                     color='yellow', ann_fontsize=ann_fontsize, ax=ax,
-                    rotate=True)
+                    rotation=90)
 
     # Inner Annular Size
     # Top label + arrow
-    x618 = 951 // 2 - 40
+    x618 = 951 // 2 - 50
     y618 = 295
-    dx618 = 200
+    dx618 = 175
     dy618 = 0
 
     ax = add_arrows(n_pixels=618, x=x618, y=y618, dx=dx618, dy=dy618,
@@ -1650,17 +1654,17 @@ def plot_apertures(image, aperture,
 
     # Left label + arrow
     x225 = 185
-    y225 = 400 // 2 - 60
+    y225 = 400 // 2 - 70
     dx225 = 0
-    dy225 = 50
+    dy225 = 25
 
     ax = add_arrows(n_pixels=225, x=x225, y=y225, dx=dx225, dy=dy225,
                     color='red', ann_fontsize=ann_fontsize, ax=ax,
-                    rotate=True)
+                    rotation=90)
 
     # Photometry Aperture Size
     # Top label + arrow
-    x493 = 951 // 2 - 40
+    x493 = 951 // 2 - 50
     y493 = 205
     dx493 = 150
     dy493 = 0
@@ -1669,14 +1673,14 @@ def plot_apertures(image, aperture,
                     color='white', ann_fontsize=ann_fontsize, ax=ax)
 
     # Left label + arrow
-    x45 = 215
-    y45 = 400 // 2 - 60
+    x45 = 715
+    y45 = 400 // 2 - 65
     dx45 = None
     dy45 = None
 
     ax = add_arrows(n_pixels=45, x=x45, y=y45, dx=dx45, dy=dy45,
                     color='white', ann_fontsize=ann_fontsize, ax=ax,
-                    rotate=True)
+                    rotation=-90)
     return ax
 
 
