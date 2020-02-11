@@ -39,10 +39,14 @@ def plot_32_subplots_for_each_feature(aper_widths,
                                       idx_split, use_xcenters,
                                       use_ycenters, use_trace_angles,
                                       use_trace_lengths, focus='aic',
-                                      one_fig=False):
+                                      one_fig=False, fontsize=25,
+                                      ann_fontsize=14, axs=None):
 
-    if one_fig:
+    if one_fig and axs is None:
         fig, axs = plt.subplots(nrows=4, ncols=8)
+    elif axs is not None:
+        for ax in axs.flatten():
+            ax.clear()
 
     n_options = len(aper_widths)
     counter = 0
@@ -76,33 +80,65 @@ def plot_32_subplots_for_each_feature(aper_widths,
                                                    use_trace_angles_,
                                                    use_trace_lengths_,
                                                    focus=focus,
-                                                   one_fig=one_fig)
+                                                   one_fig=one_fig,
+                                                   fontsize=fontsize,
+                                                   ann_fontsize=ann_fontsize)
+    n_axs = len(axs.flatten())
+    for k, ax in enumerate(axs.flatten()):
+        if k < n_axs - 8:
+            ax.set_xticks([])
+        else:
+            ax.set_xticks([15, 20, 25])
+
+        if k not in [0, 8, 16, 24]:
+            ax.set_yticks([])
+        else:
+            ax.set_yticks([45, 50, 55, 60])
+
+        for tick in ax.xaxis.get_major_ticks():
+            tick.label.set_fontsize(ann_fontsize)
+
+        for tick in ax.yaxis.get_major_ticks():
+            tick.label.set_fontsize(ann_fontsize)
+
+    plt.subplots_adjust(
+        top=0.95,
+        bottom=0.05,
+        left=0.03,
+        right=0.995,
+        hspace=0.25,
+        wspace=0.02
+    )
+
+    return axs
 
 
-def plot_map_model(times, phots, uncs, model, t0_guess):
+def plot_map_model(times, phots, uncs, model, t0_guess,
+                   fontsize=40, leg_fontsize=30):
     fig, ax = plt.subplots()
 
     ax.errorbar(times - t0_guess, phots, uncs,
                 fmt='o', ms=10, label='WASP43b UVIS')
     ax.plot(times - t0_guess, model, 'k--', lw=3, label='MAP Model')
 
-    ax.legend(loc=0, fontsize=15)
+    ax.legend(loc=0, fontsize=leg_fontsize)
 
     ax.set_xlim(None, None)
     ax.set_ylim(None, None)
     ax.set_ylabel('Normalized Flux [ppm]')
-    ax.set_xlabel('Hours from Eclipse', fontsize=20)
+    ax.set_xlabel('Hours from Eclipse', fontsize=fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fonstize(15)
+        tick.label.set_fonstize(fontsize)
 
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fonstize(15)
+        tick.label.set_fonstize(fontsize)
 
 
 def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
                              use_trace_angles, use_trace_lengths,
-                             res_diff_ppm, width=1e-3):
+                             res_diff_ppm, width=1e-3,
+                             fontsize=40, leg_fontsize=30):
     plt.scatter(idx_split[~idx_split] * width + 0 * width,
                 res_diff_ppm[~idx_split],
                 alpha=0.1, edgecolors='None')
@@ -139,9 +175,9 @@ def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
                 alpha=0.1, edgecolors='None')
 
     plt.scatter([], [],
-                label='IDX Split False', edgecolors='None', color='C0')
+                label='IDX Split False', edgecolors='None', color=plasmas[0])
     plt.scatter([], [],
-                label='IDX Split True', edgecolors='None', color='C1')
+                label='IDX Split True', edgecolors='None', color=plasmas[2])
     plt.scatter([], [],
                 label='Use Xcenters False', edgecolors='None', color='C2')
     plt.scatter([], [],
@@ -160,10 +196,10 @@ def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
                 label='Use Trace Lengths True', edgecolors='None', color='C9')
 
     plt.xlim(-width, None)
-    plt.legend(loc=0, fontsize=15)
+    plt.legend(loc=0, fontsize=fontsize)
 
 
-def plot_aper_width_grid():
+def plot_aper_width_grid(fontsize=40, leg_fontsize=30):
     rand0 = np.random.normal(0, 0.1, 3200)
 
     plt.scatter(res_std_ppm[res_diff_ppm > 0],
@@ -187,7 +223,7 @@ def plot_aper_width_grid():
                 c=res_std_ppm[~use_xcenters], alpha=0.25,
                 label='x:False y:False', marker='^')
 
-    plt.legend(loc=0, fontsize=15)
+    plt.legend(loc=0, fontsize=fontsize)
 
 
 def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
@@ -198,7 +234,8 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                                idx_split_, use_xcenters_, use_ycenters_,
                                use_trace_angles_, use_trace_lengths_,
                                focus='aic', one_fig=False, fig=None,
-                               hspace=0.5):
+                               hspace=0.5, fontsize=25, ann_fontsize=14):
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     foci = {}
     foci['std'] = res_std_ppm
@@ -229,6 +266,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                      c=focus_[sub_sect],
                      marker='s', s=200)
 
+    min_min = focus_.min()
     min_aic_sub = focus_[sub_sect].min()
     argmin_aic_sub = focus_[sub_sect].argmin()
     manual_argmin = np.where(focus_[sub_sect] == min_aic_sub)[0][0]
@@ -244,13 +282,13 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
             color='C1', ms=10)
 
     ax.annotate(txt,
-                (width_best - 0.5 + 0.1, height_best - 0.5 + 0.1),
+                (width_best, height_best),
                 # xycoords='axes fraction',
-                xytext=(width_best - 0.5 + 0.1, height_best - 0.5 + 0.1),
+                xytext=(width_best + 1, height_best - 3),
                 # textcoords='offset points',
                 ha='left',
                 va='bottom',
-                fontsize=12,
+                fontsize=ann_fontsize,
                 color='C1',
                 weight='bold')
 
@@ -259,19 +297,19 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
         features = features + 'Fwd/Rev Split\n'
 
     if use_xcenters_:
-        features = features + 'Fit Xcenters\n'
+        features = features + 'X-Centers\n'
 
     if use_ycenters_:
-        features = features + 'Fit Ycenters\n'
+        features = features + 'Y-Centers\n'
 
     if use_trace_angles_:
-        features = features + 'Fit Trace Angles\n'
+        features = features + 'Trace Angles\n'
 
     if use_trace_lengths_:
-        features = features + 'Fit Trace Lengths'
+        features = features + 'Trace Lengths'
 
     if features == '':
-        features = 'Null Hypothesis'
+        features = 'Null\nHypothesis'
 
     annotate_loc = (0.1, 0.9)
     ax.annotate(features,
@@ -281,12 +319,15 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                 textcoords='offset points',
                 ha='left',
                 va='top',
-                fontsize=10,
-                color='black',
+                fontsize=ann_fontsize,
+                color='white',
                 weight='bold')
 
     title = f'{focus.upper()}: {np.int(np.round(min_aic_sub)):0.0f}'
-    ax.set_title(title)
+    if min_aic_sub == min_min:
+        ax.set_title(title, fontsize=fontsize, color=plasmas[1])
+    else:
+        ax.set_title(title, fontsize=fontsize)
 
     if one_fig:
         plt.subplots_adjust(hspace=hspace)
@@ -300,7 +341,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
         cb = plt.colorbar(out, cax=cbaxes)
 
 
-def plot_aperture_edges_with_angle(planet, img_id=42):
+def plot_aperture_edges_with_angle(planet, img_id=42, fontsize=40, axs=None):
     image = planet.image_stack[img_id]
     y_center = planet.trace_ycenters[img_id]
     x_left = planet.x_left
@@ -314,7 +355,12 @@ def plot_aperture_edges_with_angle(planet, img_id=42):
         positions[img_id], trace_width, 2, thetas[img_id])
     aper_flat = RectangularAperture(positions[img_id], trace_width, 2, 0)
 
-    fig, axs = plt.subplots(nrows=2, ncols=2)
+    if axs is None:
+        fig, axs = plt.subplots(nrows=2, ncols=2)
+    else:
+        for ax in axs.flatten():
+            ax.clear()
+
     plt.subplots_adjust(bottom=0, left=0, right=1,
                         top=0.95, hspace=0.01, wspace=0.01)
 
@@ -322,64 +368,79 @@ def plot_aperture_edges_with_angle(planet, img_id=42):
     [ax.imshow(image) for axrow in axs for ax in axrow]
     [ax.set_ylim(y_center - 5, y_center + 5) for axrow in axs for ax in axrow]
 
-    aper_tilt.plot(axes=axs[0][0], color='white')
-    aper_tilt.plot(axes=axs[0][1], color='white')
-    aper_flat.plot(axes=axs[1][0], color='red')
-    aper_flat.plot(axes=axs[1][1], color='red')
+    aper_tilt.plot(axes=axs[0][0], color='white', lw=5)
+    aper_tilt.plot(axes=axs[0][1], color='white', lw=5)
+    aper_flat.plot(axes=axs[1][0], color='red', lw=5)
+    aper_flat.plot(axes=axs[1][1], color='red', lw=5)
 
     axs[0][0].set_xlim(x_left - 10, x_left + 10)
     axs[1][0].set_xlim(x_left - 10, x_left + 10)
     axs[0][1].set_xlim(x_right - 10, x_right + 10)
     axs[1][1].set_xlim(x_right - 10, x_right + 10)
 
-    axs[0][0].annotate('With Calculated Tilt',
+    axs[0][0].annotate('With Rotated Aperture',
                        (0, 0),
                        xycoords='axes fraction',
                        xytext=(5, 5),
                        textcoords='offset points',
                        ha='left',
                        va='bottom',
-                       fontsize=20,
+                       fontsize=fontsize,
                        color='white')
 
-    axs[0][1].annotate('With Calculated Tilt',
-                       (0, 0),
-                       xycoords='axes fraction',
-                       xytext=(5, 5),
-                       textcoords='offset points',
-                       ha='left',
-                       va='bottom',
-                       fontsize=20,
-                       color='white')
+    # axs[0][1].annotate('With Rotated Aperture',
+    #                    (0, 0),
+    #                    xycoords='axes fraction',
+    #                    xytext=(5, 5),
+    #                    textcoords='offset points',
+    #                    ha='left',
+    #                    va='bottom',
+    #                    fontsize=fontsize,
+    #                    color='white')
 
-    axs[1][0].annotate('Without Calculated Tilt',
+    axs[1][0].annotate('Without Rotated Aperture',
                        (0, 0),
                        xycoords='axes fraction',
                        xytext=(5, 5),
                        textcoords='offset points',
                        ha='left',
                        va='bottom',
-                       fontsize=20,
+                       fontsize=fontsize,
                        color='red')
 
-    axs[1][1].annotate('Without Calculated Tilt',
-                       (0, 0),
-                       xycoords='axes fraction',
-                       xytext=(5, 5),
-                       textcoords='offset points',
-                       ha='left',
-                       va='bottom',
-                       fontsize=20,
-                       color='red')
+    # axs[1][1].annotate('Without Rotated Aperture',
+    #                    (0, 0),
+    #                    xycoords='axes fraction',
+    #                    xytext=(5, 5),
+    #                    textcoords='offset points',
+    #                    ha='left',
+    #                    va='bottom',
+    #                    fontsize=fontsize,
+    #                    color='red')
+    # fig = plt.gcf()
+    # fig.suptitle('Example Aperture With and Without Rotation',
+    #              fontsize=fontsize)
 
-    fig.suptitle('Example Aperture With and Without Rotation', fontsize=20)
+    plt.subplots_adjust(
+        top=1.0,
+        bottom=0.0,
+        left=0.0,
+        right=1.0,
+        hspace=0.0,
+        wspace=0.0
+    )
+
+    return axs
 
 
 def uniform_scatter_plot(planet, arr1, arr2, include_orbits=True,
-                         arr1_center=0, use_time_sort=True, size=50,
-                         title='', xlabel='', ylabel='', ax=None):
+                         arr1_center=0, use_time_sort=True, size=200,
+                         title='', xlabel='', ylabel='', ms=15, fontsize=40,
+                         ann_fontsize=30, leg_fontsize=30, ax=None):
     # https://stackoverflow.com/questions/45786714/custom-marker-edge-style-in-manual-legend
     # marker=u'$\u25CC$'
+
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -398,30 +459,34 @@ def uniform_scatter_plot(planet, arr1, arr2, include_orbits=True,
 
     ax.scatter(arr1[planet.idx_fwd] - arr1_center,
                arr2[planet.idx_fwd], s=size,
-               color='C0', label='Forward Scans')
+               color=plasmas[0], label='Forward Scans')
 
     ax.scatter(arr1[planet.idx_rev] - arr1_center,
                arr2[planet.idx_rev], s=size,
-               color='C1', label='Reverse Scans')
+               color=plasmas[2], label='Reverse Scans')
 
-    ax.set_title(title, fontsize=20)
-    ax.set_xlabel(xlabel, fontsize=20)
-    ax.set_ylabel(ylabel, fontsize=20)
+    ax.set_title(title, fontsize=fontsize)
+    ax.set_xlabel(xlabel, fontsize=fontsize)
+    ax.set_ylabel(ylabel, fontsize=fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(ann_fontsize)
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(ann_fontsize)
 
     if not include_orbits:
-        ax.legend(loc=0, fontsize=20)
+        ax.legend(loc=0, fontsize=leg_fontsize)
         return ax
 
     # By hand values from looking at the light curve
     ax.plot(arr1[time_sort][idx_orbit1] - arr1_center,
             arr2[time_sort][idx_orbit1], 'o',
-            ms=20, mew=2, color='none', mec='black',
+            ms=25, mew=2, color='none', mec='black',
             label='First Orbit', zorder=0, marker=u'$\u25CC$')
+
+    if include_orbits == 'only_the_first':
+        ax.legend(loc=0, fontsize=leg_fontsize)
+        return ax
 
     ax.plot(arr1[time_sort][idx_orbit2] - arr1_center,
             arr2[time_sort][idx_orbit2], 'o',
@@ -438,13 +503,15 @@ def uniform_scatter_plot(planet, arr1, arr2, include_orbits=True,
             ms=20, mew=2, color='none', mec='indigo',
             label='Fourth Orbit', zorder=0)  # , marker=u'$\u25CC$')
 
-    ax.legend(loc=0, fontsize=20)
+    ax.legend(loc=0, fontsize=leg_fontsize)
     return ax
 
 
-def plot_center_position_vs_scan_and_orbit(planet, t0_base=0, size=50,
-                                           include_orbits=True, ax=None):
-    title = 'Center Positions of the Trace in Forward and Reverse Scanning'
+def plot_center_position_vs_scan_and_orbit(planet, t0_base=0, size=200,
+                                           include_orbits=True, fontsize=40,
+                                           ann_fontsize=30, leg_fontsize=30,
+                                           ax=None):
+    title = 'Center Positions of the Trace'
     xlabel = 'X-Center [pixels]'
     ylabel = 'Y-Center [pixels]'
 
@@ -457,13 +524,42 @@ def plot_center_position_vs_scan_and_orbit(planet, t0_base=0, size=50,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
-def plot_ycenter_vs_time(planet, t0_base=None, size=50,
-                         include_orbits=True, ax=None):
+def plot_xcenter_position_vs_trace_length(planet, t0_base=0, size=200,
+                                          include_orbits=True, fontsize=40,
+                                          ann_fontsize=30, leg_fontsize=30,
+                                          ax=None):
+    title = 'X-Center vs Trace Lengths'
+    xlabel = 'X-Center [pixels]'
+    ylabel = 'Trace Lengths [pixels]'
+
+    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
+    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+
+    ax = uniform_scatter_plot(planet,
+                              xcenters,
+                              trace_lengths,
+                              arr1_center=t0_base,
+                              title=title,
+                              xlabel=xlabel,
+                              ylabel=ylabel,
+                              size=size,
+                              include_orbits=include_orbits,
+                              fontsize=fontsize,
+                              ax=ax)
+
+    return ax
+
+
+def plot_ycenter_vs_time(planet, t0_base=None, size=200,
+                         include_orbits=True, fontsize=40,
+                         ann_fontsize=30, leg_fontsize=30,
+                         ax=None):
     title = 'Y-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Y-Center [pixels]'
@@ -477,13 +573,16 @@ def plot_ycenter_vs_time(planet, t0_base=None, size=50,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
-def plot_xcenter_vs_time(planet, t0_base=None, size=50,
-                         include_orbits=True, ax=None):
+def plot_xcenter_vs_time(planet, t0_base=None, size=200,
+                         include_orbits=True, fontsize=40,
+                         ann_fontsize=30, leg_fontsize=30,
+                         ax=None):
     title = 'X-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'X-Center [pixels]'
@@ -497,13 +596,16 @@ def plot_xcenter_vs_time(planet, t0_base=None, size=50,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
-def plot_trace_angle_vs_time(planet, nSig=0.5, size=50, t0_base=None,
-                             include_orbits=True, ax=None):
+def plot_trace_angle_vs_time(planet, nSig=0.5, size=200, t0_base=None,
+                             include_orbits=True, fontsize=40,
+                             ann_fontsize=30, leg_fontsize=30,
+                             ax=None):
     title = 'Trace Angle vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Trace Angle [degrees]'
@@ -519,6 +621,7 @@ def plot_trace_angle_vs_time(planet, nSig=0.5, size=50, t0_base=None,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     y_min, y_max = np.percentile(trace_angles, [0.1, 99.9])
@@ -531,8 +634,10 @@ def plot_trace_angle_vs_time(planet, nSig=0.5, size=50, t0_base=None,
     return ax
 
 
-def plot_trace_length_vs_time(planet, t0_base=None, size=50,
-                              include_orbits=True, ax=None):
+def plot_trace_length_vs_time(planet, t0_base=None, size=200,
+                              include_orbits=True, fontsize=40,
+                              ann_fontsize=30, leg_fontsize=30,
+                              ax=None):
     title = 'Trace Lengths vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Trace Length [pixels]'
@@ -546,14 +651,17 @@ def plot_trace_length_vs_time(planet, t0_base=None, size=50,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
 def plot_columwise_background_vs_time(planet,  # aper_width, aper_height,
-                                      t0_base=None, size=50,
-                                      include_orbits=True, ax=None):
+                                      t0_base=None, size=200,
+                                      include_orbits=True, fontsize=40,
+                                      ann_fontsize=30, leg_fontsize=30,
+                                      ax=None):
 
     title = 'Sky Background vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
@@ -573,13 +681,16 @@ def plot_columwise_background_vs_time(planet,  # aper_width, aper_height,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
-def plot_aperture_background_vs_time(planet, t0_base=None, size=50,
-                                     include_orbits=True, ax=None):
+def plot_aperture_background_vs_time(planet, t0_base=None, size=200,
+                                     include_orbits=True, fontsize=40,
+                                     ann_fontsize=30, leg_fontsize=30,
+                                     ax=None):
     title = 'Sky Background vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Sky Background [electrons]'
@@ -593,14 +704,17 @@ def plot_aperture_background_vs_time(planet, t0_base=None, size=50,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     return ax
 
 
 def plot_ycenter_vs_flux(planet, aper_width, aper_height,
-                         use_time_sort=False, nSig=0.5, size=50,
-                         t0_base=0, ax=None, include_orbits=True):
+                         use_time_sort=False, nSig=0.5, size=200,
+                         t0_base=0, ax=None, fontsize=40,
+                         ann_fontsize=30, leg_fontsize=30,
+                         include_orbits=True):
 
     ppm = 1e6
 
@@ -627,6 +741,7 @@ def plot_ycenter_vs_flux(planet, aper_width, aper_height,
                               use_time_sort=use_time_sort,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     ax.set_ylim(min_flux - nSig * std_flux,
@@ -638,17 +753,23 @@ def plot_ycenter_vs_flux(planet, aper_width, aper_height,
 def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                               xytext=(15, 15), n_sig=5, varname='Other',
                               n_spaces=[10, 10], convert_to_ppm=True,
-                              lw=3, fontsize=10, xlim=None, fig=None, ax=None):
+                              lw=5, ms=15, fontsize=40, leg_fontsize=30,
+                              units=None, xticks=None, yticks=None,
+                              plot_annotation=False,
+                              xlim=None, fig=None, ax=None):
     ppm = 1e6
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if fig is None and ax is None:
         fig, ax = plt.subplots()
 
-    if ax is None:
-        ax = fig.add_subplot(111)
+    # if ax is None:
+    #     ax = fig.add_subplot(111)
 
     if ax is None:
         fig, ax = plt.subplots()
+
+    ax.clear()
 
     inliers = np.sqrt((other - np.median(other))**2 + (flux - np.median(flux))
                       ** 2) < n_sig * np.sqrt(np.var(other) + np.var(flux))
@@ -685,21 +806,14 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
                         times_normed[inliers],
                         flux_normed[inliers])
 
-    # annotation = (f'o_slope:{fit_o.slope.value:0.2e}\n'
-    #               f't_slope:{fit_t.slope.value:0.2e}\n'
-    #               f'c_slope_o:{fit_comb.slope_x.value:0.2e}\n'
-    #               f'c_slope_t:{fit_comb.slope_y.value:0.2e}\n'
-    #               f'o_intcpt:{fit_o.intercept.value:0.2e}\n'
-    #               f't_intcpt:{fit_t.intercept.value:0.2e}\n'
-    #               f'c_intcpt:{fit_comb.intercept.value:0.2e}'
-    #               )
-
-    n_sp0, n_sp1 = n_spaces
-    annotation = (f'2D Slope {varname}: {fit_comb.slope_x.value:0.2e}\n'
-                  f'2D Slope Time:{" "*n_sp0}{fit_comb.slope_y.value:0.2f}\n'
-                  f'2D Intercept:{" "*(n_sp1)}'
-                  f'{fit_comb.intercept.value * flux_std * ppm:0.2f} [ppm]'
-                  )
+    if plot_annotation:
+        n_sp0, n_sp1 = n_spaces
+        other_slope = fit_comb.slope_x.value
+        time_slope = fit_comb.slope_y.value
+        intercept = fit_comb.intercept.value * flux_std * ppm
+        annotation = (f'2D Slope {varname}: {other_slope:0.2e}\n'
+                      f'2D Slope Time:{" "*n_sp0}{time_slope:0.2f}\n'
+                      f'2D Intercept:{" "*(n_sp1)}{intercept:0.2f} [ppm]')
 
     min_o = other_normed.min()
     max_o = other_normed.max()
@@ -707,29 +821,31 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
     max_t = times_normed.max()
 
     ax.plot(other_normed[idx_fwd] * other_std,
-            flux_normed[idx_fwd] * flux_std * ppm,
-            'o', label='Forward Scan')
+            flux_normed[idx_fwd] * flux_std * ppm, 'o',
+            ms=ms, label='Forward Scan', color=plasmas[0])
     ax.plot(other_normed[idx_rev] * other_std,
-            flux_normed[idx_rev] * flux_std * ppm,
-            'o', label='Reverse Scan')
+            flux_normed[idx_rev] * flux_std * ppm, 'o',
+            ms=ms, label='Reverse Scan', color=plasmas[2])
 
     other_normed_th = np.linspace(2 * min_o, 2 * max_o, 100)
     times_normed_th = np.linspace(2 * min_t, 2 * max_t, 100)
 
+    label = f'{varname} Best Fit'
     best_model = fit_comb(other_normed_th, times_normed_th)
     ax.plot(other_normed_th * other_std, best_model * flux_std * ppm,
-            lw=lw, zorder=0)
+            lw=lw, zorder=0, color=plasmas[1], label=label)
 
-    ax.set_title(f'{varname} + Time 2D Fit to Flux')
-    ax.annotate(annotation,
-                (0, 0),
-                xycoords="axes fraction",
-                xytext=xytext,
-                textcoords="offset points",
-                ha="left",
-                va="bottom",
-                fontsize=12,
-                )
+    # ax.set_title()
+    if plot_annotation:
+        ax.annotate(annotation,
+                    (0, 0),
+                    xycoords="axes fraction",
+                    xytext=xytext,
+                    textcoords="offset points",
+                    ha="left",
+                    va="bottom",
+                    fontsize=20,
+                    )
 
     if xlim is None:
         ax.set_xlim(1.05 * min_o * other_std, 1.05 * max_o * other_std)
@@ -737,21 +853,45 @@ def plot_2D_fit_time_vs_other(times, flux, other, idx_fwd, idx_rev,
         assert(len(xlim) == 2), "`xlim` must be a 2-tuple"
         ax.set_xlim(xlim)
 
+    xlabel = f'{varname}'  # ' [Median Subtracted]'
+
+    if units is not None:
+        xlabel = f'{xlabel} [{units}]'
+
+    if convert_to_ppm:
+        xticks = ax.get_xticks()
+        ax.set_xticklabels(np.int32(np.round(xticks * ppm)))
+        xlabel = f'{varname} [ppm]'  # [Median Subtracted; ppm]'
+    elif xticks is not None:
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(xticks)
+
+    if yticks is not None:
+        ax.set_yticklabels(yticks)
+
     ax.set_ylabel('Flux [ppm]')
-    ax.set_xlabel(f'{varname} [Median Subtracted]')
-    ax.legend(loc=0, fontsize=fontsize)
+    ax.set_xlabel(xlabel)
+    ax.legend(loc=1, fontsize=leg_fontsize)
 
-    return fig, ax
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(leg_fontsize)
+
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label.set_fontsize(leg_fontsize)
+
+    return ax
 
 
-def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
+def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=90,
                                  n_edepths=1000, kernel='gaussian', lw=5,
-                                 bins=50, verbose=False, ax=None,
+                                 bins=50, verbose=False, fontsize=40,
+                                 leg_fontsize=30, ax=None,
                                  hist_color='C4', kde_color='C0',
                                  kde_alpha=1.0, include_hist=True):
 
     # spelled Frenchy on purpose
-    bleus = ('#1f77b4', '#52aae7', '#85ddff')
+    # purples = ('#9467bd', '#c79af0', '#facdff')
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
         fig, ax = plt.subplots()
@@ -761,9 +901,115 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
     ppm = 1e6
 
     edepths = mcmc_samples_df['edepth'].values
+    reverse_edepths = -(edepths - np.min(edepths)) + np.min(edepths)
+    edepths_fake = np.r_[edepths, reverse_edepths]
 
-    edepths_fake = np.r_[edepths,
-                         -(edepths - np.min(edepths)) + np.min(edepths)]
+    sigmas = erf(np.arange(1, 6) / np.sqrt(2))
+    percentiles = np.percentile(edepths * ppm, sigmas * 100)
+
+    if verbose:
+        for k, (sigma_, perc_) in enumerate(zip(sigmas, percentiles)):
+            print(f'{k+1}-sigma: {sigma_*100:0.5f}% - {perc_*1e6:0.1f} ppm')
+
+    edepths_med = np.median(edepths)
+    edepths_th_real = np.linspace(min_edepth, max_edepth, n_edepths)
+
+    # instantiate and fit the KDE model
+    kde = KernelDensity(bandwidth=1.0, kernel=kernel)
+    kde.fit((edepths_fake * ppm)[:, None])
+
+    # score_samples returns the log of the probability density
+    logprob = kde.score_samples(edepths_th_real[:, None])
+    kde_edepths_real_vals = np.exp(logprob)
+    max_kde_edepth = np.max(kde_edepths_real_vals)
+    edepths_mode = edepths_th_real[np.argmax(kde_edepths_real_vals)]
+
+    # lbl_base = 'MCMC Posterior'
+    if include_hist:
+        yhist, _, _ = ax.hist(edepths * ppm, bins=bins, density=True,
+                              color=hist_color, zorder=-1, alpha=0.7,
+                              # label=f'{kernel.capitalize()} {lbl_base}'
+                              # ' Histogram'
+                              )
+    else:
+        yhist, _ = np.histogram(edepths * ppm, bins=bins, density=True)
+
+        plt.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
+                         color='darkgrey')  # , alpha=kde_alpha)
+
+    last_perc = min_edepth
+    for color_, perc_ in zip(plasmas, percentiles):
+        edepths_th_ = np.linspace(
+            last_perc, perc_, n_edepths // len(plasmas))
+
+        logprob_ = kde.score_samples(edepths_th_[:, None])
+        kde_edepths_ = np.exp(logprob_)
+        plt.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
+                         color=color_, alpha=kde_alpha)
+
+        last_perc = perc_
+
+    # plt.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
+    #                  label=f'{kernel.capitalize()} {lbl_base} KDE')
+
+    # ax.axvline(edepths_mode, color=plasmas[2], ls='--', lw=lw)
+    # annotation = f'{kernel.capitalize()} KDE Mode: {edepths_mode:0.0f} ppm'
+    # ax.annotate(annotation,
+    #             xy=(edepths_mode + 1.0, 100 * 0.25 * max_kde_edepth),
+    #             rotation=90, color=plasmas[2], fontsize=fontsize)
+
+    # ax.plot([], [], color=plasmas[2], ls='-', lw=lw,
+    #         label=f'Mode {kernel.capitalize()} KDE-MCMC')
+
+    latex_sigma = r"$\sigma$"
+    for k, (sigma_, perc_) in enumerate(zip(sigmas, percentiles)):
+        # sigma_str = f'{k+1}-{latex_sigma}'
+        annotation = f'{perc_:0.0f} ppm'
+        ax.axvline(perc_, color='#555555', ls='--', lw=2)
+        ax.annotate(annotation, xy=(perc_ + 0.5, 100 * 0.8 * max_kde_edepth),
+                    rotation=90, color='#555555', fontsize=fontsize)
+
+    ax.set_ylim(1e-6, 100 * yhist.max() * 1.02)
+    ax.set_xlim(min_edepth, max_edepth)
+    ax.set_xlabel('Eclipse Depth [ppm]', fontsize=fontsize)
+    ax.set_ylabel('Marginalized Posterior Probability [%]', fontsize=fontsize)
+    ax.set_xticks(np.arange(10, max_edepth, 10))
+
+    # ax.legend(loc=9, fontsize=leg_fontsize)
+
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(fontsize)
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label.set_fontsize(fontsize)
+
+    for key, val in ax.spines.items():
+        val.set_visible(False)
+
+    return ax
+
+
+def plot_kde_with_BCR_annotation_robust(
+        mcmc_samples_df, min_edepth=0, max_edepth=100,
+        n_edepths=1000, kernel='gaussian', lw=5,
+        bins=50, verbose=False, fontsize=40,
+        leg_fontsize=30, ax=None,
+        hist_color='C4', kde_color='C0',
+        kde_alpha=1.0, include_hist=True):
+
+    # spelled Frenchy on purpose
+    # purples = ('#9467bd', '#c79af0', '#facdff')
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.clear()
+
+    ppm = 1e6
+
+    edepths = mcmc_samples_df['edepth'].values
+    reverse_edepths = -(edepths - np.min(edepths)) + np.min(edepths)
+    edepths_fake = np.r_[edepths, reverse_edepths]
 
     sigmas = erf(np.arange(1, 6) / np.sqrt(2))
     percentiles = np.percentile(edepths * ppm, sigmas * 100)
@@ -798,9 +1044,9 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
                          color='darkgrey')  # , alpha=kde_alpha)
 
     last_perc = min_edepth
-    for color_, perc_ in zip(bleus, percentiles):
+    for color_, perc_ in zip(plasmas, percentiles):
         edepths_th_ = np.linspace(
-            last_perc, perc_, n_edepths // len(bleus))
+            last_perc, perc_, n_edepths // len(plasmas))
 
         logprob_ = kde.score_samples(edepths_th_[:, None])
         kde_edepths_ = np.exp(logprob_)
@@ -809,16 +1055,16 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
 
         last_perc = perc_
 
-    plt.fill_between([], [], color=bleus[0], alpha=kde_alpha,
+    plt.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
                      label=f'{kernel.capitalize()} {lbl_base} KDE')
 
-    ax.axvline(edepths_mode, color='C1', ls='--', lw=lw)
+    ax.axvline(edepths_mode, color=plasmas[2], ls='--', lw=lw)
     annotation = f'{kernel.capitalize()} KDE Mode: {edepths_mode:0.0f} ppm'
     ax.annotate(annotation,
                 xy=(edepths_mode + 1.0, 100 * 0.25 * max_kde_edepth),
-                rotation=90, color='C1', fontsize=30)
+                rotation=90, color=plasmas[2], fontsize=fontsize)
 
-    ax.plot([], [], color='C1', ls='-', lw=lw,
+    ax.plot([], [], color=plasmas[2], ls='-', lw=lw,
             label=f'Mode {kernel.capitalize()} KDE-MCMC')
 
     latex_sigma = r"$\sigma$"
@@ -827,19 +1073,19 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
         annotation = f'{perc_:0.0f} ppm'
         ax.axvline(perc_, color='#555555', ls='--', lw=2)
         ax.annotate(annotation, xy=(perc_ + 0.5, 100 * 0.8 * max_kde_edepth),
-                    rotation=90, color='#555555', fontsize=30)
+                    rotation=90, color='#555555', fontsize=fontsize)
 
     ax.set_ylim(0, 100 * yhist.max() * 1.02)
     ax.set_xlim(min_edepth, max_edepth)
-    ax.set_xlabel('Eclipse Depth [ppm]', fontsize=20)
-    ax.set_ylabel('Marginalized Posterior Probability [%]', fontsize=20)
+    ax.set_xlabel('Eclipse Depth [ppm]', fontsize=fontsize)
+    ax.set_ylabel('Marginalized Posterior Probability [%]', fontsize=fontsize)
 
-    ax.legend(loc=9, fontsize=20)
+    ax.legend(loc=9, fontsize=leg_fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
     for key, val in ax.spines.items():
         val.set_visible(False)
@@ -848,8 +1094,9 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=100,
 
 
 def plot_xcenter_vs_flux(planet, aper_width, aper_height,
-                         use_time_sort=False, nSig=0.5, t0_base=0, size=50,
-                         include_orbits=True, ax=None):
+                         use_time_sort=False, nSig=0.5, t0_base=0, size=200,
+                         include_orbits=True, fontsize=40,
+                         leg_fontsize=30, ax=None):
 
     ppm = 1e6
 
@@ -875,6 +1122,46 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
                               ylabel=ylabel,
                               use_time_sort=use_time_sort,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
+                              size=size,
+                              ax=ax)
+
+    ax.set_ylim(min_flux - nSig * std_flux,
+                max_flux + nSig * std_flux)
+
+    return ax
+
+
+def plot_trace_lengths_vs_flux(planet, aper_width, aper_height,
+                               use_time_sort=False, nSig=0.5, t0_base=0,
+                               size=200, include_orbits=True, fontsize=40,
+                               leg_fontsize=30, ax=None):
+
+    ppm = 1e6
+
+    aper_column = f'aperture_sum_{aper_width}x{aper_height}'
+    fluxes = planet.normed_photometry_df[aper_column]
+
+    title = 'Flux vs Trace Lengths'
+    xlabel = 'Trace Lengths [pixels]'
+    ylabel = 'Flux [ppm]'
+
+    med_flux = np.median(fluxes)
+    fluxes = (fluxes - med_flux) * ppm
+
+    min_flux, max_flux = np.percentile(fluxes, [0.01, 99.99])
+    std_flux = fluxes[(fluxes >= min_flux) * (fluxes <= max_flux)].std()
+
+    ax = uniform_scatter_plot(planet,
+                              planet.trace_lengths,
+                              fluxes,
+                              arr1_center=0,
+                              title=title,
+                              xlabel=xlabel,
+                              ylabel=ylabel,
+                              use_time_sort=use_time_sort,
+                              include_orbits=include_orbits,
+                              fontsize=fontsize,
                               size=size,
                               ax=ax)
 
@@ -887,10 +1174,11 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
 def plot_best_aic_light_curve(planet, map_solns,
                               decor_results_df,  # mcmc_samples_df,
                               aic_apers,  keys_list,
-                              aic_thresh=2, t0_base=0,
-                              plot_many=False, plot_raw=False,
-                              ax=None):
+                              aic_thresh=2, t0_base=0, fontsize=40,
+                              leg_fontsize=30, plot_many=False,
+                              plot_raw=False, ax=None):
     ppm = 1e6
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     idx_fwd = planet.idx_fwd
     idx_rev = planet.idx_rev
@@ -933,12 +1221,12 @@ def plot_best_aic_light_curve(planet, map_solns,
     ax.errorbar(times[idx_fwd],
                 phots_corrected[idx_fwd] * ppm,
                 uncs[idx_fwd] * ppm, label='Forward Scan',
-                fmt='o', color='C0', ms=10, zorder=10)
+                fmt='o', color=plasmas[0], ms=10, zorder=10)
 
     ax.errorbar(times[idx_rev],
                 phots_corrected[idx_rev] * ppm,
                 uncs[idx_rev] * ppm, label='Reverse Scan',
-                fmt='o', color='C1', ms=10, zorder=10)
+                fmt='o', color=plasmas[2], ms=10, zorder=10)
 
     ax.plot(times[times.argsort()], map_model[times.argsort()] * ppm,
             label='Best Fit Model', color='C7', lw=3, zorder=5)
@@ -953,16 +1241,16 @@ def plot_best_aic_light_curve(planet, map_solns,
         ax.plot(times[idx_rev], phots_med_sub[idx_rev] * ppm, 'o',
                 color='darkorange', ms=10, zorder=0, alpha=0.2, mew=0)
 
-    ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
-    ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=fontsize)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
-    ax.legend(loc=0, fontsize=15)
+    ax.legend(loc=0, fontsize=leg_fontsize)
     if not plot_many:
         plt.show()
         return ax
@@ -1069,8 +1357,10 @@ def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
 
 def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
                        aper_column, n_pts_th=int(1e5), t0_base=0,
-                       limb_dark=[0], plot_raw=False, ax=None):
+                       limb_dark=[0], plot_raw=False, ax=None,
+                       fontsize=40, leg_fontsize=30):
     ppm = 1e6
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     idx_fwd = planet.idx_fwd
     idx_rev = planet.idx_rev
@@ -1109,12 +1399,12 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
     ax.errorbar(times[idx_fwd] - t0_base,
                 phots_corrected[idx_fwd] * ppm,
                 uncs[idx_fwd] * ppm, label='Forward Scan',
-                fmt='o', color='C0', ms=10, zorder=10)
+                fmt='o', color=plasmas[0], ms=10, zorder=10)
 
     ax.errorbar(times[idx_rev] - t0_base,
                 phots_corrected[idx_rev] * ppm,
                 uncs[idx_rev] * ppm, label='Reverse Scan',
-                fmt='o', color='C1', ms=10, zorder=10)
+                fmt='o', color=plasmas[2], ms=10, zorder=10)
 
     ax.plot(times_th - t0_base, eclipse_model * ppm,
             label='Best Fit Model', color='C3', lw=5, zorder=5)
@@ -1138,25 +1428,28 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
                 color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
         ax.plot(times[idx_rev] - t0_base, phots_med_sub[idx_rev] * ppm, 'o',
                 color='darkorange', ms=10, zorder=0, alpha=0.2, mew=0)
-
+    print(min_corrected, max_corrected)
     ax.set_ylim(min_corrected, max_corrected)
-    ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
-    ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=fontsize)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
-    ax.legend(loc=0, fontsize=15)
+    ax.legend(loc=0, fontsize=leg_fontsize, ncol=3)  # ,
+    # bbox_to_anchor=(0.102, 0.825))
 
     return ax
 
 
 def plot_raw_light_curve(planet, aper_width, aper_height,
-                         lw=3, t0_base=0, ax=None):
+                         lw=3, fontsize=40, leg_fontsize=30,
+                         t0_base=0, ax=None):
     ppm = 1e6
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     idx_fwd = planet.idx_fwd
     idx_rev = planet.idx_rev
@@ -1177,33 +1470,34 @@ def plot_raw_light_curve(planet, aper_width, aper_height,
     ax.errorbar(times[idx_fwd],
                 phots_med_sub[idx_fwd] * ppm,
                 uncs[idx_fwd] * ppm, label='Forward Scan',
-                fmt='o', color='C0', ms=10, zorder=1, mew=0)
+                fmt='o', color=plasmas[0], ms=10, zorder=1, mew=0)
 
     ax.errorbar(times[idx_rev],
                 phots_med_sub[idx_rev] * ppm,
                 uncs[idx_rev] * ppm, label='Reverse Scan',
-                fmt='o', color='C1', ms=10, zorder=1, mew=0)
+                fmt='o', color=plasmas[2], ms=10, zorder=1, mew=0)
 
     ax.axhline(0.0, ls='--', color='darkgrey', lw=lw,
                zorder=0, label='Null Hypothesis')
 
-    ax.set_xlabel('Time [Days from Eclipse]', fontsize=20)
-    ax.set_ylabel('Normalized Flux [ppm]', fontsize=20)
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=fontsize)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=fontsize)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(15)
+        tick.label.set_fontsize(fontsize)
 
-    ax.legend(loc=0, fontsize=15)
+    ax.legend(loc=0, fontsize=leg_fontsize)
     plt.show()
 
     return ax
 
 
 def plot_lightcurve(planet, aper_width, aper_height,
-                    size=50, t0_base=None, include_orbits=True):
+                    size=200, fontsize=40, leg_fontsize=30,
+                    t0_base=None, include_orbits=True):
 
     flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
     fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
@@ -1224,6 +1518,7 @@ def plot_lightcurve(planet, aper_width, aper_height,
                               ylabel=ylabel,
                               size=size,
                               include_orbits=include_orbits,
+                              fontsize=fontsize,
                               ax=ax)
 
     plt.ylim(min_flux, max_flux)
@@ -1232,7 +1527,9 @@ def plot_lightcurve(planet, aper_width, aper_height,
 
 
 def plot_apertures(image, aperture,
-                   inner_annular=None, outer_annular=None):
+                   inner_annular=None,
+                   outer_annular=None,
+                   ax=None):
     norm = simple_norm(image, 'sqrt', percent=99)
 
     plt.imshow(image, norm=norm)
@@ -1243,7 +1540,7 @@ def plot_apertures(image, aperture,
         inner_annular.plot(color='red', lw=2)
 
     if outer_annular is not None:
-        outer_annular.plot(color='violet', lw=2)
+        outer_annular.plot(color='yellow', lw=2)
 
     plt.axis('off')
     plt.tight_layout()
@@ -1251,6 +1548,8 @@ def plot_apertures(image, aperture,
 
 
 def plot_trace_peaks(planet, image_id):
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
+
     image = planet.image_stack[image_id]
     image_shape = image.shape
     gauss_means = np.zeros(image_shape[1])
@@ -1260,7 +1559,7 @@ def plot_trace_peaks(planet, image_id):
     norm = simple_norm(image, 'sqrt', percent=99)
     plt.imshow(image, norm=norm)
     plt.plot(np.arange(image_shape[1]), gauss_means,
-             'o', color='C1', ms=1)
+             'o', color=plasmas[2], ms=1)
 
     plt.xlim(0, image_shape[1])
     plt.ylim(0, image_shape[0])
@@ -1270,6 +1569,7 @@ def plot_trace_peaks(planet, image_id):
 
 
 def plot_errorbars(planet, id_=None):
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     id_ = list(planet.fluxes['apertures'].keys())[0] if id_ is None else id_
 
@@ -1292,7 +1592,7 @@ def plot_errorbars(planet, id_=None):
     plt.errorbar(planet.times[planet.idx_fwd],
                  fluxes_normed[planet.idx_fwd],
                  errors_normed[planet.idx_fwd],
-                 fmt='o', color='C0')
+                 fmt='o', color=plasmas[0])
 
     plt.errorbar(planet.times[planet.idx_rev],
                  fluxes_normed[planet.idx_rev],
@@ -1312,7 +1612,7 @@ def plot_errorbars(planet, id_=None):
                  ha='left',
                  va='bottom',
                  fontsize=12,
-                 color='C0',
+                 color=plasmas[0],
                  weight='bold')
 
     plt.annotate(rev_annotate,
@@ -1463,15 +1763,16 @@ def plot_2D_stddev(planet, signal_max=235):
                  # textcoords='offset points',
                  ha='left',
                  va='bottom',
-                 fontsize=12,
+                 fontsize=fontsize // 2,
                  color='C1',
                  weight='bold')
 
-    plt.xlabel('Aperture Width Outside Trace', fontsize=20)
-    plt.ylabel('Aperture Height Above Trace', fontsize=20)
+    plt.xlabel('Aperture Width Outside Trace', fontsize=fontsize)
+    plt.ylabel('Aperture Height Above Trace', fontsize=fontsize)
 
     plt.xlim(min_widths - 2, max_widths + 2)
     plt.ylim(min_height - 5, max_height + 5)
 
     plt.title(
-        'Raw Lightcurve Normalized Std-Dev over Height x Width of Aperture', fontsize=20)
+        'Raw Lightcurve Normalized Std-Dev over Height x Width of Aperture',
+        fontsize=fontsize)

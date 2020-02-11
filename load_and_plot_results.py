@@ -37,7 +37,8 @@ if __name__ == '__main__':
     aper_width_bic_best = 13
     aper_height_bic_best = 45
 
-    core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
+    # core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
+    core_dir = os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')
 
     if not os.path.exists(core_dir):
         core_dir = os.path.join(HOME, 'Research', 'Planets')
@@ -78,7 +79,7 @@ if __name__ == '__main__':
         np.round(((np.median(times) - t0_wasp43) / period_wasp43) - 0.5))
     t0_guess = t0_wasp43 + (n_epochs + 0.5) * period_wasp43
 
-    data_dir = '/Volumes/WhenImSixtyFourGB/WASP43/github_analysis/notebooks'
+    data_dir = f'{core_dir}/WASP43/github_analysis/notebooks'
     maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
     maps_only_filename = os.path.join(data_dir, maps_only_filename)
 
@@ -129,7 +130,7 @@ if __name__ == '__main__':
 
     mcmc_samples_df = pd.read_csv(mcmc_samples_fname)
     best_mcmc_params = mcmc_samples_df.median()
-
+    best_mcmc_params['slope_time'] = best_mcmc_params['slope']
     # best = [False, True, True, True, False, True]
     toggle_idx_split = False
     toggle_xcenters = True
@@ -170,23 +171,49 @@ if __name__ == '__main__':
     smoothingKernel = 1
     customLabelFont = {'rotation': 45, 'size': 20}  # ,
     # 'xlabelpad': 0, 'ylabelpad': 0}
+    customTickFont = {'size': 20}
 
-    pygtc.plotGTC(mcmc_samples_df,
+    ppm_columns = ['edepth', 'slope', 'slope_xcenter', 'slope_ycenter',
+                   'slope_trace_length'],
+    param_names = ['Mean Offset', 'Eclipse Depth', 'Time Slope',
+                   'X-Center Slope', 'Y-Center Slope',
+                   'Trace Length Slope']
+
+    ppm = 1e6
+    plot_samples_df = mcmc_samples_df.copy()
+    for colname in ppm_columns:
+        plot_samples_df[colname] = plot_samples_df[colname] * ppm
+
+    plot_samples_df['mean'] = (plot_samples_df['mean'] - 1) * ppm
+
+    pygtc.plotGTC(plot_samples_df,
                   plotName=plotName,
                   smoothingKernel=smoothingKernel,
+                  paramNames=param_names,
                   labelRotation=[True] * 2,
+                  colorsOrder=['cmap'],
+                  cmap=plt.cm.plasma,
                   # plotDensity=True,
                   customLabelFont=customLabelFont,
                   nContourLevels=3,
-                  figureSize='APJ_page'
+                  figureSize='MNRAS_page',
+                  customTickFont=customTickFont
                   )
 
-    ppm = 1e6
+    plt.subplots_adjust(
+        top=0.995,
+        bottom=0.1,
+        left=0.45,
+        right=0.995,
+        hspace=0.01,
+        wspace=0.01
+    )
 
     # Values from L.C. Mayorga predictions
     eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
                       'fsed=0.1': [96.379104 / ppm, ':']}
     aper_column = 'aperture_sum_13x45'
+
     fig, ax = plt.subplots()
     ax = plotting.plot_set_of_models(planet, best_mcmc_params,
                                      eclipse_depths, wasp43,
@@ -194,64 +221,120 @@ if __name__ == '__main__':
                                      n_pts_th=1000, t0_base=t0_guess,
                                      plot_raw=True, ax=ax)
 
-    ax = plotting.plot_best_aic_light_curve(
-        planet, map_solns, decor_results_df,
-        aic_apers,  keys_list,
-        aic_thresh=2, t0_base=t0_guess,
-        plot_many=False, plot_raw=True,
-        ax=ax)
+    # ax = plotting.plot_best_aic_light_curve(
+    #     planet, map_solns, decor_results_df,
+    #     aic_apers,  keys_list,
+    #     aic_thresh=2, t0_base=t0_guess,
+    #     plot_many=False, plot_raw=True,
+    #     ax=ax)
+
+    # ax = plotting.plot_best_aic_light_curve(
+    #     planet, map_solns, decor_results_df,
+    #     aic_apers,  keys_list,
+    #     aic_thresh=2, t0_base=t0_guess,
+    #     plot_many=False, plot_raw=True,
+    #     ax=ax)
 
     ax = plotting.plot_raw_light_curve(planet,
                                        aper_width_bic_best,
                                        aper_height_bic_best,
                                        t0_base=t0_guess,
                                        ax=ax)
-
-    ax = plotting.plot_best_aic_light_curve(
-        planet, map_solns,
-        decor_results_df,  # mcmc_samples_df,
-        aic_apers,  keys_list,
-        aic_thresh=2, t0_base=t0_guess,
-        plot_many=False, plot_raw=True,
-        ax=ax)
-
-    plotting.plot_32_subplots_for_each_feature(
+    axs = None  # for starters and re-starters
+    axs = plotting.plot_32_subplots_for_each_feature(
         aper_widths, aper_heights,
         res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
         idx_split, use_xcenters, use_ycenters, use_trace_angles,
-        use_trace_lengths, one_fig=True, focus='aic')
-
-    aper_width = 13
-    aper_height = 45
+        use_trace_lengths, one_fig=True, focus='aic', axs=axs)
 
     ax = plotting.plot_aperture_background_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
     ax = plotting.plot_columwise_background_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
     ax = plotting.plot_trace_angle_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
     ax = plotting.plot_trace_length_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
     ax = plotting.plot_xcenter_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
     ax = plotting.plot_ycenter_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=100, include_orbits=False)
+        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
 
     ax = plotting.plot_center_position_vs_scan_and_orbit(
-        planet, ax=ax, t0_base=0, size=100, include_orbits=True)
+        planet, ax=ax, t0_base=0, size=200, include_orbits='only_the_first')
+
+    ax = plotting.plot_xcenter_position_vs_trace_length(
+        planet, ax=ax, t0_base=0, size=200, include_orbits=False)
 
     ax = plotting.plot_ycenter_vs_flux(
-        planet, aper_width, aper_height,
-        t0_base=0, ax=ax, size=100, include_orbits=False)
+        planet, aper_width_bic_best, aper_height_bic_best,
+        t0_base=0, ax=ax, size=200, include_orbits=False)
 
     ax = plotting.plot_xcenter_vs_flux(
-        planet, aper_width, aper_height,
-        t0_base=0, ax=ax, size=100, include_orbits=False)
+        planet, aper_width_bic_best, aper_height_bic_best,
+        t0_base=0, ax=ax, size=200, include_orbits=False)
+
+    ax = plotting.plot_trace_lengths_vs_flux(
+        planet, aper_width_bic_best, aper_height_bic_best,
+        t0_base=0, ax=ax, size=200, include_orbits=False)
+
+    fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
+    fine_min_aic_colname = f'{fine_min_aic_colname}x{aper_height_bic_best}'
+
+    times = planet.times
+    flux = planet.normed_photometry_df[fine_min_aic_colname]
+
+    trace_angles = planet.trace_angles
+    ax = plotting.plot_2D_fit_time_vs_other(
+        times, flux, trace_angles, idx_fwd, idx_rev,
+        xytext=(15, 15), n_sig=5,
+        varname='Trace Angles', n_spaces=[10, 10],
+        convert_to_ppm=True, fontsize=40,
+        leg_fontsize=30, xlim=None, fig=None,
+        ax=ax)
+
+    trace_lengths = planet.trace_lengths
+    ax = plotting.plot_2D_fit_time_vs_other(
+        times, flux, trace_lengths, idx_fwd, idx_rev,
+        xytext=(15, 15), n_sig=5,
+        varname='Trace Lengths', n_spaces=[10, 10],
+        convert_to_ppm=False, fontsize=40,
+        leg_fontsize=30, units='pixels',
+        xlim=None, fig=None, ax=ax)
+
+    xcenters = planet.trace_xcenters
+    ax = plotting.plot_2D_fit_time_vs_other(
+        times, flux, xcenters, idx_fwd, idx_rev,
+        xytext=(15, 15), n_sig=5,
+        varname='X-Centers', n_spaces=[10, 10],
+        convert_to_ppm=False, fontsize=40,
+        leg_fontsize=30, units='pixels',
+        xlim=None, fig=None, ax=ax)
+
+    xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
+    ycenters = planet.trace_ycenters
+    ax = plotting.plot_2D_fit_time_vs_other(
+        times, flux, ycenters, idx_fwd, idx_rev,
+        xytext=(15, 15), n_sig=5,
+        varname='Y-Centers', n_spaces=[10, 10],
+        convert_to_ppm=False, lw=5, fontsize=40,
+        leg_fontsize=30, units='pixels', xticks=xticks,
+        xlim=None, fig=None, ax=ax)
 
     kernels = ('gaussian', 'tophat', 'epanechnikov',
                'exponential', 'linear', 'cosine')
 
     # fig, ax = plt.subplots()
 
-    ax = plotting.plot_kde_with_BCR_annotation(
-        mcmc_samples_df, kernel=kernels[0], ax=ax)
+    ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
+                                               kernel='gaussian',
+                                               ax=ax, fontsize=30)
+
+    axs = plotting.plot_aperture_edges_with_angle(
+        planet, img_id=42, fontsize=40, axs=axs)
+
+    aperture =
+    ax = plot_apertures(image, aperture,
+                        inner_annular=None,
+                        outer_annular=None,
+                        ax=ax)
