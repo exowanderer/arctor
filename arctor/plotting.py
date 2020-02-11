@@ -1526,25 +1526,158 @@ def plot_lightcurve(planet, aper_width, aper_height,
     return ax
 
 
+def add_arrows(n_pixels, x, y, dx, dy, ax,
+               rotate=False, color='white', ann_fontsize=30):
+
+    rotation = 90 if rotate else 0
+
+    ax.annotate(f'{n_pixels} Pixels',
+                (0, 0),
+                # xycoords='axes fraction',
+                # xytext=(951 // 2, 20),
+                xytext=(x, y),
+                # textcoords='offset points',
+                ha='left',
+                va='bottom',
+                fontsize=ann_fontsize,
+                color=color,
+                weight='bold',
+                rotation=rotation)
+
+    max_arrow_width = 0.5
+    max_head_width = 2.5 * max_arrow_width
+    max_head_length = 2 * max_arrow_width
+
+    if dx is None or dy is None:
+        return ax
+
+    x_0 = x + 6 if rotate else x + 90
+    y_0 = y + 90 if rotate else y + 8
+    plt.arrow(x_0, y_0, dx, dy,
+              head_width=max_head_width, head_length=max_head_length,
+              color=color, lw=5, )
+
+    x_1 = x + 6 if rotate else x - 10
+    y_1 = y - 10 if rotate else y + 8
+    plt.arrow(x_1, y_1, -dx, -dy,
+              head_width=max_head_width, head_length=max_head_length,
+              color=color, lw=5)
+    return ax
+
+
 def plot_apertures(image, aperture,
                    inner_annular=None,
                    outer_annular=None,
-                   ax=None):
+                   lw=5, ann_fontsize=30, ax=None):
+
     norm = simple_norm(image, 'sqrt', percent=99)
 
-    plt.imshow(image, norm=norm)
+    if ax is not None:
+        ax.clear()
 
-    aperture.plot(color='white', lw=2)
+    plt.imshow(image, norm=norm, origin='lower')
+
+    aperture.plot(color='white', lw=lw, ax=ax)
 
     if inner_annular is not None:
-        inner_annular.plot(color='red', lw=2)
+        inner_annular.plot(color='red', lw=lw, ax=ax)
 
     if outer_annular is not None:
-        outer_annular.plot(color='yellow', lw=2)
+        outer_annular.plot(color='yellow', lw=lw, ax=ax)
 
     plt.axis('off')
-    plt.tight_layout()
-    plt.waitforbuttonpress()
+    plt.subplots_adjust(
+        top=1,
+        bottom=0,
+        left=0,
+        right=1,
+        hspace=0,
+        wspace=0
+    )
+
+    fig = plt.gcf()
+    ax = fig.get_axes()[0]
+
+    # Frame Size
+    # Top label + arrow
+    x951 = 951 // 2 - 40
+    y951 = 380
+    dx951 = 350
+    dy951 = 0
+
+    ax = add_arrows(n_pixels=951, x=x951, y=y951, dx=dx951, dy=dy951,
+                    color='lightgreen', ann_fontsize=ann_fontsize, ax=ax)
+
+    # Left label + arrow
+    x400 = 10
+    y400 = 400 // 2 - 40
+    dx400 = 0
+    dy400 = 100
+
+    ax = add_arrows(n_pixels=400, x=x400, y=y400, dx=dx400, dy=dy400,
+                    color='lightgreen', ann_fontsize=ann_fontsize, ax=ax,
+                    rotate=True)
+
+    # Outer Annular Size
+    # Top label + arrow
+    x767 = 951 // 2 - 40
+    y767 = 357
+    dx767 = 225
+    dy767 = 0
+
+    ax = add_arrows(n_pixels=767, x=x767, y=y767, dx=dx767, dy=dy767,
+                    color='yellow', ann_fontsize=ann_fontsize, ax=ax)
+
+    # Left label + arrow
+    x350 = 145
+    y350 = 400 // 2 - 60
+    dx350 = 0
+    dy350 = 100
+
+    ax = add_arrows(n_pixels=350, x=x350, y=y350, dx=dx350, dy=dy350,
+                    color='yellow', ann_fontsize=ann_fontsize, ax=ax,
+                    rotate=True)
+
+    # Inner Annular Size
+    # Top label + arrow
+    x618 = 951 // 2 - 40
+    y618 = 295
+    dx618 = 200
+    dy618 = 0
+
+    ax = add_arrows(n_pixels=618, x=x618, y=y618, dx=dx618, dy=dy618,
+                    color='red', ann_fontsize=ann_fontsize, ax=ax)
+
+    # Left label + arrow
+    x225 = 185
+    y225 = 400 // 2 - 60
+    dx225 = 0
+    dy225 = 50
+
+    ax = add_arrows(n_pixels=225, x=x225, y=y225, dx=dx225, dy=dy225,
+                    color='red', ann_fontsize=ann_fontsize, ax=ax,
+                    rotate=True)
+
+    # Photometry Aperture Size
+    # Top label + arrow
+    x493 = 951 // 2 - 40
+    y493 = 205
+    dx493 = 150
+    dy493 = 0
+
+    ax = add_arrows(n_pixels=493, x=x493, y=y493, dx=dx493, dy=dy493,
+                    color='white', ann_fontsize=ann_fontsize, ax=ax)
+
+    # Left label + arrow
+    x45 = 215
+    y45 = 400 // 2 - 60
+    dx45 = None
+    dy45 = None
+
+    ax = add_arrows(n_pixels=45, x=x45, y=y45, dx=dx45, dy=dy45,
+                    color='white', ann_fontsize=ann_fontsize, ax=ax,
+                    rotate=True)
+    return ax
 
 
 def plot_trace_peaks(planet, image_id):

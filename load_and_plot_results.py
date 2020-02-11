@@ -333,8 +333,31 @@ if __name__ == '__main__':
     axs = plotting.plot_aperture_edges_with_angle(
         planet, img_id=42, fontsize=40, axs=axs)
 
-    aperture =
-    ax = plot_apertures(image, aperture,
-                        inner_annular=None,
-                        outer_annular=None,
-                        ax=ax)
+    from photutils import RectangularAperture
+    pos_median = (np.median(planet.trace_xcenters),
+                  np.median(planet.trace_ycenters))
+    theta_median = np.median(planet.trace_angles)
+
+    inner_width = 75
+    outer_width = 150
+    inner_height = 225
+    outer_height = 350
+
+    inner_width = np.median(planet.trace_lengths) + inner_width
+    outer_width = np.median(planet.trace_lengths) + outer_width
+    aperture_width = np.median(planet.trace_lengths) + aper_width_bic_best
+    aperture_height = aper_height_bic_best
+
+    aperture = RectangularAperture(
+        pos_median, aperture_width, aperture_height, theta_median)
+
+    inner_annular = RectangularAperture(
+        pos_median, inner_width, inner_height, theta_median)
+    outer_annular = RectangularAperture(
+        pos_median, outer_width, outer_height, theta_median)
+
+    ax = plotting.plot_apertures(image=planet.image_stack[42],
+                                 aperture=aperture,
+                                 inner_annular=inner_annular,
+                                 outer_annular=outer_annular,
+                                 lw=5)
