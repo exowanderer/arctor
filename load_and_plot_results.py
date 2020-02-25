@@ -1,25 +1,29 @@
-from matplotlib import use as mpl_use
+cannot_plot = False
 
 try:
+    from matplotlib import use as mpl_use
     mpl_use('Qt5Agg')
 except Exception as err:
+    cannot_plot = True
     print(f'[WARNING] {err}')
 
-from matplotlib import pyplot as plt
+try:
+    from matplotlib import pyplot as plt
+    import pygtc
+    from arctor import plotting
+except Exception as err:
+    cannot_plot = True
+    print(f'[WARNING] {err}')
+    print(f'          You probably are running on a remote server')
 
 import joblib
 import numpy as np
 import os
 import pandas as pd
-import pygtc
 
 from arctor import Arctor
-# from arctor.utils import fit_2D_time_vs_other
 from arctor.utils import extract_map_only_data, create_results_df
 from arctor.utils import setup_and_plot_GTC, info_message
-# from arctor.plotting import plot_32_subplots_for_each_feature
-# from arctor.plotting import plot_best_aic_light_curve
-from arctor import plotting
 
 from exomast_api import exoMAST_API
 from tqdm import tqdm
@@ -90,9 +94,8 @@ if __name__ == '__main__':
         use_xcenters, use_ycenters, use_trace_angles, use_trace_lengths,\
         fine_grain_mcmcs_s, map_solns, res_std_ppm, phots_std_ppm,\
         res_diff_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers = \
-        extract_map_only_data(
-            planet, idx_fwd, idx_rev,
-            maps_only_filename=maps_only_filename)
+        extract_map_only_data(planet, idx_fwd, idx_rev,
+                              maps_only_filename=maps_only_filename)
 
     # filename = 'decor_span_MAPs_only_aper_columns_list.joblib.save'
     # filename = os.path.join(data_dir, filename)
@@ -186,178 +189,180 @@ if __name__ == '__main__':
 
     plot_samples_df['mean'] = (plot_samples_df['mean'] - 1) * ppm
 
-    pygtc.plotGTC(plot_samples_df,
-                  plotName=plotName,
-                  smoothingKernel=smoothingKernel,
-                  paramNames=param_names,
-                  labelRotation=[True] * 2,
-                  colorsOrder=['cmap'],
-                  cmap=plt.cm.plasma,
-                  # plotDensity=True,
-                  customLabelFont=customLabelFont,
-                  nContourLevels=3,
-                  figureSize='MNRAS_page',
-                  customTickFont=customTickFont
-                  )
+    # Check if you can plot
+    if not cannot_plot:
+        pygtc.plotGTC(plot_samples_df,
+                      plotName=plotName,
+                      smoothingKernel=smoothingKernel,
+                      paramNames=param_names,
+                      labelRotation=[True] * 2,
+                      colorsOrder=['cmap'],
+                      cmap=plt.cm.plasma,
+                      # plotDensity=True,
+                      customLabelFont=customLabelFont,
+                      nContourLevels=3,
+                      figureSize='MNRAS_page',
+                      customTickFont=customTickFont
+                      )
 
-    plt.subplots_adjust(
-        top=0.995,
-        bottom=0.1,
-        left=0.45,
-        right=0.995,
-        hspace=0.01,
-        wspace=0.01
-    )
+        plt.subplots_adjust(
+            top=0.995,
+            bottom=0.1,
+            left=0.45,
+            right=0.995,
+            hspace=0.01,
+            wspace=0.01
+        )
 
-    # Values from L.C. Mayorga predictions
-    eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
-                      'fsed=0.1': [96.379104 / ppm, ':']}
-    aper_column = 'aperture_sum_13x45'
+        # Values from L.C. Mayorga predictions
+        eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
+                          'fsed=0.1': [96.379104 / ppm, ':']}
+        aper_column = 'aperture_sum_13x45'
 
-    fig, ax = plt.subplots()
-    ax = plotting.plot_set_of_models(planet, best_mcmc_params,
-                                     eclipse_depths, wasp43,
-                                     aper_column=aper_column,
-                                     n_pts_th=1000, t0_base=t0_guess,
-                                     plot_raw=True, ax=ax)
+        fig, ax = plt.subplots()
+        ax = plotting.plot_set_of_models(planet, best_mcmc_params,
+                                         eclipse_depths, wasp43,
+                                         aper_column=aper_column,
+                                         n_pts_th=1000, t0_base=t0_guess,
+                                         plot_raw=True, ax=ax)
 
-    # ax = plotting.plot_best_aic_light_curve(
-    #     planet, map_solns, decor_results_df,
-    #     aic_apers,  keys_list,
-    #     aic_thresh=2, t0_base=t0_guess,
-    #     plot_many=False, plot_raw=True,
-    #     ax=ax)
+        # ax = plotting.plot_best_aic_light_curve(
+        #     planet, map_solns, decor_results_df,
+        #     aic_apers,  keys_list,
+        #     aic_thresh=2, t0_base=t0_guess,
+        #     plot_many=False, plot_raw=True,
+        #     ax=ax)
 
-    # ax = plotting.plot_best_aic_light_curve(
-    #     planet, map_solns, decor_results_df,
-    #     aic_apers,  keys_list,
-    #     aic_thresh=2, t0_base=t0_guess,
-    #     plot_many=False, plot_raw=True,
-    #     ax=ax)
+        # ax = plotting.plot_best_aic_light_curve(
+        #     planet, map_solns, decor_results_df,
+        #     aic_apers,  keys_list,
+        #     aic_thresh=2, t0_base=t0_guess,
+        #     plot_many=False, plot_raw=True,
+        #     ax=ax)
 
-    ax = plotting.plot_raw_light_curve(planet,
-                                       aper_width_bic_best,
-                                       aper_height_bic_best,
-                                       t0_base=t0_guess,
-                                       ax=ax)
-    axs = None  # for starters and re-starters
-    axs = plotting.plot_32_subplots_for_each_feature(
-        aper_widths, aper_heights,
-        res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
-        idx_split, use_xcenters, use_ycenters, use_trace_angles,
-        use_trace_lengths, one_fig=True, focus='aic', axs=axs)
+        ax = plotting.plot_raw_light_curve(planet,
+                                           aper_width_bic_best,
+                                           aper_height_bic_best,
+                                           t0_base=t0_guess,
+                                           ax=ax)
+        axs = None  # for starters and re-starters
+        axs = plotting.plot_32_subplots_for_each_feature(
+            aper_widths, aper_heights,
+            res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
+            idx_split, use_xcenters, use_ycenters, use_trace_angles,
+            use_trace_lengths, one_fig=True, focus='aic', axs=axs)
 
-    ax = plotting.plot_aperture_background_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
-    ax = plotting.plot_columwise_background_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
-    ax = plotting.plot_trace_angle_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
-    ax = plotting.plot_trace_length_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
-    ax = plotting.plot_xcenter_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
-    ax = plotting.plot_ycenter_vs_time(
-        planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_aperture_background_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_columwise_background_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_trace_angle_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_trace_length_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_xcenter_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        ax = plotting.plot_ycenter_vs_time(
+            planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
 
-    ax = plotting.plot_center_position_vs_scan_and_orbit(
-        planet, ax=ax, t0_base=0, size=200, include_orbits='only_the_first')
+        ax = plotting.plot_center_position_vs_scan_and_orbit(
+            planet, ax=ax, t0_base=0, size=200, include_orbits='only_the_first')
 
-    ax = plotting.plot_xcenter_position_vs_trace_length(
-        planet, ax=ax, t0_base=0, size=200, include_orbits=False)
+        ax = plotting.plot_xcenter_position_vs_trace_length(
+            planet, ax=ax, t0_base=0, size=200, include_orbits=False)
 
-    ax = plotting.plot_ycenter_vs_flux(
-        planet, aper_width_bic_best, aper_height_bic_best,
-        t0_base=0, ax=ax, size=200, include_orbits=False)
+        ax = plotting.plot_ycenter_vs_flux(
+            planet, aper_width_bic_best, aper_height_bic_best,
+            t0_base=0, ax=ax, size=200, include_orbits=False)
 
-    ax = plotting.plot_xcenter_vs_flux(
-        planet, aper_width_bic_best, aper_height_bic_best,
-        t0_base=0, ax=ax, size=200, include_orbits=False)
+        ax = plotting.plot_xcenter_vs_flux(
+            planet, aper_width_bic_best, aper_height_bic_best,
+            t0_base=0, ax=ax, size=200, include_orbits=False)
 
-    ax = plotting.plot_trace_lengths_vs_flux(
-        planet, aper_width_bic_best, aper_height_bic_best,
-        t0_base=0, ax=ax, size=200, include_orbits=False)
+        ax = plotting.plot_trace_lengths_vs_flux(
+            planet, aper_width_bic_best, aper_height_bic_best,
+            t0_base=0, ax=ax, size=200, include_orbits=False)
 
-    fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
-    fine_min_aic_colname = f'{fine_min_aic_colname}x{aper_height_bic_best}'
+        fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
+        fine_min_aic_colname = f'{fine_min_aic_colname}x{aper_height_bic_best}'
 
-    times = planet.times
-    flux = planet.normed_photometry_df[fine_min_aic_colname]
+        times = planet.times
+        flux = planet.normed_photometry_df[fine_min_aic_colname]
 
-    trace_angles = planet.trace_angles
-    ax = plotting.plot_2D_fit_time_vs_other(
-        times, flux, trace_angles, idx_fwd, idx_rev,
-        xytext=(15, 15), n_sig=5,
-        varname='Trace Angles', n_spaces=[10, 10],
-        convert_to_ppm=True, fontsize=40,
-        leg_fontsize=30, xlim=None, fig=None,
-        ax=ax)
+        trace_angles = planet.trace_angles
+        ax = plotting.plot_2D_fit_time_vs_other(
+            times, flux, trace_angles, idx_fwd, idx_rev,
+            xytext=(15, 15), n_sig=5,
+            varname='Trace Angles', n_spaces=[10, 10],
+            convert_to_ppm=True, fontsize=40,
+            leg_fontsize=30, xlim=None, fig=None,
+            ax=ax)
 
-    trace_lengths = planet.trace_lengths
-    ax = plotting.plot_2D_fit_time_vs_other(
-        times, flux, trace_lengths, idx_fwd, idx_rev,
-        xytext=(15, 15), n_sig=5,
-        varname='Trace Lengths', n_spaces=[10, 10],
-        convert_to_ppm=False, fontsize=40,
-        leg_fontsize=30, units='pixels',
-        xlim=None, fig=None, ax=ax)
+        trace_lengths = planet.trace_lengths
+        ax = plotting.plot_2D_fit_time_vs_other(
+            times, flux, trace_lengths, idx_fwd, idx_rev,
+            xytext=(15, 15), n_sig=5,
+            varname='Trace Lengths', n_spaces=[10, 10],
+            convert_to_ppm=False, fontsize=40,
+            leg_fontsize=30, units='pixels',
+            xlim=None, fig=None, ax=ax)
 
-    xcenters = planet.trace_xcenters
-    ax = plotting.plot_2D_fit_time_vs_other(
-        times, flux, xcenters, idx_fwd, idx_rev,
-        xytext=(15, 15), n_sig=5,
-        varname='X-Centers', n_spaces=[10, 10],
-        convert_to_ppm=False, fontsize=40,
-        leg_fontsize=30, units='pixels',
-        xlim=None, fig=None, ax=ax)
+        xcenters = planet.trace_xcenters
+        ax = plotting.plot_2D_fit_time_vs_other(
+            times, flux, xcenters, idx_fwd, idx_rev,
+            xytext=(15, 15), n_sig=5,
+            varname='X-Centers', n_spaces=[10, 10],
+            convert_to_ppm=False, fontsize=40,
+            leg_fontsize=30, units='pixels',
+            xlim=None, fig=None, ax=ax)
 
-    xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
-    ycenters = planet.trace_ycenters
-    ax = plotting.plot_2D_fit_time_vs_other(
-        times, flux, ycenters, idx_fwd, idx_rev,
-        xytext=(15, 15), n_sig=5,
-        varname='Y-Centers', n_spaces=[10, 10],
-        convert_to_ppm=False, lw=5, fontsize=40,
-        leg_fontsize=30, units='pixels', xticks=xticks,
-        xlim=None, fig=None, ax=ax)
+        xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
+        ycenters = planet.trace_ycenters
+        ax = plotting.plot_2D_fit_time_vs_other(
+            times, flux, ycenters, idx_fwd, idx_rev,
+            xytext=(15, 15), n_sig=5,
+            varname='Y-Centers', n_spaces=[10, 10],
+            convert_to_ppm=False, lw=5, fontsize=40,
+            leg_fontsize=30, units='pixels', xticks=xticks,
+            xlim=None, fig=None, ax=ax)
 
-    kernels = ('gaussian', 'tophat', 'epanechnikov',
-               'exponential', 'linear', 'cosine')
+        kernels = ('gaussian', 'tophat', 'epanechnikov',
+                   'exponential', 'linear', 'cosine')
 
-    # fig, ax = plt.subplots()
+        # fig, ax = plt.subplots()
 
-    ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
-                                               kernel='gaussian',
-                                               ax=ax, fontsize=30)
+        ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
+                                                   kernel='gaussian',
+                                                   ax=ax, fontsize=30)
 
-    axs = plotting.plot_aperture_edges_with_angle(
-        planet, img_id=42, fontsize=40, axs=axs)
+        axs = plotting.plot_aperture_edges_with_angle(
+            planet, img_id=42, fontsize=40, axs=axs)
 
-    from photutils import RectangularAperture
-    pos_median = (np.median(planet.trace_xcenters),
-                  np.median(planet.trace_ycenters))
-    theta_median = np.median(planet.trace_angles)
+        from photutils import RectangularAperture
+        pos_median = (np.median(planet.trace_xcenters),
+                      np.median(planet.trace_ycenters))
+        theta_median = np.median(planet.trace_angles)
 
-    inner_width = 75
-    outer_width = 150
-    inner_height = 225
-    outer_height = 350
+        inner_width = 75
+        outer_width = 150
+        inner_height = 225
+        outer_height = 350
 
-    inner_width = np.median(planet.trace_lengths) + inner_width
-    outer_width = np.median(planet.trace_lengths) + outer_width
-    aperture_width = np.median(planet.trace_lengths) + aper_width_bic_best
-    aperture_height = aper_height_bic_best
+        inner_width = np.median(planet.trace_lengths) + inner_width
+        outer_width = np.median(planet.trace_lengths) + outer_width
+        aperture_width = np.median(planet.trace_lengths) + aper_width_bic_best
+        aperture_height = aper_height_bic_best
 
-    aperture = RectangularAperture(
-        pos_median, aperture_width, aperture_height, theta_median)
+        aperture = RectangularAperture(
+            pos_median, aperture_width, aperture_height, theta_median)
 
-    inner_annular = RectangularAperture(
-        pos_median, inner_width, inner_height, theta_median)
-    outer_annular = RectangularAperture(
-        pos_median, outer_width, outer_height, theta_median)
+        inner_annular = RectangularAperture(
+            pos_median, inner_width, inner_height, theta_median)
+        outer_annular = RectangularAperture(
+            pos_median, outer_width, outer_height, theta_median)
 
-    ax = plotting.plot_apertures(image=planet.image_stack[42],
-                                 aperture=aperture,
-                                 inner_annular=inner_annular,
-                                 outer_annular=outer_annular,
-                                 lw=5)
+        ax = plotting.plot_apertures(image=planet.image_stack[42],
+                                     aperture=aperture,
+                                     inner_annular=inner_annular,
+                                     outer_annular=outer_annular,
+                                     lw=5)
