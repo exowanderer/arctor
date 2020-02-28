@@ -306,30 +306,30 @@ if __name__ == '__main__':
         ax = plotting.plot_center_position_vs_scan_and_orbit(
             planet, ax=ax, t0_base=0, size=200,
             include_orbits='only_the_first')
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_y-center_vs_x-center_position.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_position_vs_trace_length(
             planet, ax=ax, t0_base=0, size=200, include_orbits=False)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_x-center_position_vs_trace_lengths.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_y-center_position_vs_flux.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_x-center_position_vs_flux.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_lengths_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_trace_lengths_vs_flux.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
@@ -346,7 +346,8 @@ if __name__ == '__main__':
             convert_to_ppm=True, fontsize=40,
             leg_fontsize=30, xlim=None, fig=None,
             ax=ax)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'Plasma Flux 2D correlation plot with model'
+        plot_name_ = plot_name_ + ' - trace angles - long.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         trace_lengths = planet.trace_lengths
@@ -357,7 +358,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'Plasma Flux 2D correlation plot with model'
+        plot_name_ = plot_name_ + ' - trace lengths - long.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xcenters = planet.trace_xcenters
@@ -368,7 +370,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'Plasma Flux 2D correlation plot with model'
+        plot_name_ = plot_name_ + ' - xcenters - long.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
@@ -380,7 +383,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, lw=5, fontsize=40,
             leg_fontsize=30, units='pixels', xticks=xticks,
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'Plasma Flux 2D correlation plot with model'
+        plot_name_ = plot_name_ + ' - ycenters - long.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         kernels = ('gaussian', 'tophat', 'epanechnikov',
@@ -391,13 +395,12 @@ if __name__ == '__main__':
         ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
                                                    kernel='gaussian',
                                                    ax=ax, fontsize=30)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'plasma_corner_plot_MAP_best_fit_13x45.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = plotting.plot_aperture_edges_with_angle(
             planet, img_id=42, fontsize=40, axs=axs)
-
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'New_WASP43_UVIS_aperture_zoom_before_and_after_tilt.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         from photutils import RectangularAperture
@@ -428,5 +431,6 @@ if __name__ == '__main__':
                                      inner_annular=inner_annular,
                                      outer_annular=outer_annular,
                                      lw=5)
-        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plot_name_ = 'New_WASP43_UVIS_aperture_photometry_'
+        plot_name_ = plot_name_ + 'and_median_background.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
