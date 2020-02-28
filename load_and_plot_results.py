@@ -241,6 +241,9 @@ if __name__ == '__main__':
             hspace=0.01,
             wspace=0.01
         )
+        fig = plt.gcf()
+        plot_name_ = 'plasma_corner_plot_MAP_best_fit_13x45.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         # ax = plotting.plot_best_aic_light_curve(
         #     planet, map_solns, decor_results_df,
@@ -262,16 +265,17 @@ if __name__ == '__main__':
                                            t0_base=t0_guess,
                                            ax=ax)
         axs = None  # for starters and re-starters
-        focus = 'AIC'
-        axs = plotting.plot_32_subplots_for_each_feature(
-            aper_widths, aper_heights,
-            res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
-            idx_split, use_xcenters, use_ycenters, use_trace_angles,
-            use_trace_lengths, one_fig=True, focus=focus.lower(), axs=axs)
+        for focus in ['AIC', 'BIC', 'SDNR', 'CHISQ']:
+            axs = plotting.plot_32_subplots_for_each_feature(
+                aper_widths, aper_heights,
+                res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
+                idx_split, use_xcenters, use_ycenters, use_trace_angles,
+                use_trace_lengths, one_fig=True, focus=focus.lower(), axs=axs)
 
-        plot_name_ = 'New_Plot_32_subplots_for_each_feature_'
-        plot_name_ = f'{plot_name_}{focus}_sorted.pdf'
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+            plot_name_ = 'New_Plot_32_subplots_for_each_feature_'
+            plot_name_ = plot_name_ + f'{focus}_sorted.pdf'
+            fig = plt.gcf()
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_aperture_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
@@ -395,7 +399,8 @@ if __name__ == '__main__':
         ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
                                                    kernel='gaussian',
                                                    ax=ax, fontsize=30)
-        plot_name_ = 'plasma_corner_plot_MAP_best_fit_13x45.pdf'
+        plot_name_ = 'Plasma_Fancy_Histogram_and_KDE_Eclipse_Depth_MCMC_for_'\
+            'best_MAP_fit_13x45_Square_take2.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = plotting.plot_aperture_edges_with_angle(
