@@ -1358,7 +1358,7 @@ def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
 def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
                        aper_column, n_pts_th=int(1e5), t0_base=0,
                        limb_dark=[0], plot_raw=False, ax=None,
-                       fontsize=40, leg_fontsize=30):
+                       fontsize=40, leg_fontsize=25, include_null=False):
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
@@ -1398,16 +1398,16 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
 
     ax.errorbar(times[idx_fwd] - t0_base,
                 phots_corrected[idx_fwd] * ppm,
-                uncs[idx_fwd] * ppm, label='Forward Scan',
+                uncs[idx_fwd] * ppm,
                 fmt='o', color=plasmas[0], ms=10, zorder=10)
 
     ax.errorbar(times[idx_rev] - t0_base,
                 phots_corrected[idx_rev] * ppm,
-                uncs[idx_rev] * ppm, label='Reverse Scan',
+                uncs[idx_rev] * ppm,
                 fmt='o', color=plasmas[2], ms=10, zorder=10)
 
     ax.plot(times_th - t0_base, eclipse_model * ppm,
-            label='Best Fit Model', color='C3', lw=5, zorder=5)
+            color='C3', lw=5, zorder=5)
 
     for label, (edepth, linestyle) in eclipse_depths.items():
         eclipse_model_, _ = compute_line_and_eclipse_models(
@@ -1417,10 +1417,10 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
             times_th=times_th, eclipse_depth=edepth)
 
         ax.plot(times_th - t0_base, eclipse_model_ * ppm,
-                label=label, color='C7', lw=5, zorder=5, ls=linestyle)
+                color='C7', lw=5, zorder=5, ls=linestyle)
 
-    ax.axhline(0.0, ls='--', color='k', lw=4,
-               zorder=-1, label='Null Hypothesis')
+    if include_null:
+        ax.axhline(0.0, ls='--', color='k', lw=4, zorder=-1)
 
     if plot_raw:
         phots_med_sub = phots - np.median(phots)
@@ -1428,7 +1428,30 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
                 color='darkblue', ms=10, zorder=0, alpha=0.2, mew=0)
         ax.plot(times[idx_rev] - t0_base, phots_med_sub[idx_rev] * ppm, 'o',
                 color='darkorange', ms=10, zorder=0, alpha=0.2, mew=0)
-    print(min_corrected, max_corrected)
+
+    # Build Legend
+    ax.errorbar([], [], [], label='Forward Scan',
+                fmt='o', color=plasmas[0], ms=10, zorder=10)
+
+    ax.errorbar([], [], [], label='Reverse Scan',
+                fmt='o', color=plasmas[2], ms=10, zorder=10)
+
+    ax.plot([], [], label='Best Fit Model', color='C3', lw=5, zorder=5)
+    # ax.plot([], [], label=r'{$\color{white}{Blank Line}}',
+    # color='white', lw=0, zorder=0)
+
+    for label, (edepth, linestyle) in eclipse_depths.items():
+        ax.plot([], [], label=label, color='C7', lw=5, zorder=5, ls=linestyle)
+
+    if include_null:
+        ax.axhline([], ls='--', color='k', lw=4, label='Null Hypothesis')
+
+    if plot_raw:
+        ax.plot([], [], 'o', color='darkblue', ms=10,
+                zorder=0, alpha=0.2, mew=0, label='Forward Scan Raw')
+        ax.plot([], [], 'o', color='darkorange', ms=10,
+                zorder=0, alpha=0.2, mew=0, label='Reverse Scan Raw')
+
     ax.set_ylim(min_corrected, max_corrected)
     ax.set_xlabel('Time [Days from Eclipse]', fontsize=fontsize)
     ax.set_ylabel('Normalized Flux [ppm]', fontsize=fontsize)
@@ -1439,7 +1462,8 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
     for tick in ax.yaxis.get_major_ticks():
         tick.label.set_fontsize(fontsize)
 
-    ax.legend(loc=0, fontsize=leg_fontsize, ncol=3)  # ,
+    ax.legend(loc="upper left", bbox_to_anchor=(-0.2, 1.1),
+              fontsize=leg_fontsize, ncol=5, frameon=False)  # ,
     # bbox_to_anchor=(0.102, 0.825))
 
     return ax

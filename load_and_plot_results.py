@@ -65,6 +65,7 @@ if __name__ == '__main__':
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
 
     working_dir = os.path.join(base_dir, 'github_analysis')
+    plot_dir = os.path.join(working_dir, 'paper', 'figures')
     notebook_dir = os.path.join(working_dir, 'notebooks')
 
     planet = Arctor(planet_name, data_dir, save_dir, file_type)
@@ -79,6 +80,8 @@ if __name__ == '__main__':
     planet.normed_uncertainty_df = np.sqrt(planet.photometry_df) / med_phot_df
 
     times = planet.times
+    idx_fwd = planet.idx_fwd
+    idx_rev = planet.idx_rev
 
     wasp43 = exoMAST_API('WASP43b')
     t0_wasp43 = wasp43.transit_time  # 55528.3684  # exo.mast.stsci.edu
@@ -87,35 +90,37 @@ if __name__ == '__main__':
         np.round(((np.median(times) - t0_wasp43) / period_wasp43) - 0.5))
     t0_guess = t0_wasp43 + (n_epochs + 0.5) * period_wasp43
 
-    data_dir = f'{core_dir}/WASP43/github_analysis/notebooks'
-    maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
+    data_dir = os.path.join(core_dir, 'WASP43', 'github_analysis',
+                            'notebooks', 'all400_results_decor_MAPs_only_SDNR')
+    # maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
+    maps_only_filename = 'results_decor_span_MAPs_only_SDNR_aperture_sum_13x45.joblib.save'
     maps_only_filename = os.path.join(data_dir, maps_only_filename)
 
-    idx_fwd = planet.idx_fwd
-    idx_rev = planet.idx_rev
+    try:
+        decor_span_MAPs, keys_list, aper_widths, aper_heights, idx_split,\
+            use_xcenters, use_ycenters, use_trace_angles, use_trace_lengths,\
+            fine_grain_mcmcs_s, map_solns, res_std_ppm, phots_std_ppm,\
+            res_diff_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers = \
+            extract_map_only_data(planet, idx_fwd, idx_rev,
+                                  maps_only_filename=maps_only_filename)
 
-    decor_span_MAPs, keys_list, aper_widths, aper_heights, idx_split,\
-        use_xcenters, use_ycenters, use_trace_angles, use_trace_lengths,\
-        fine_grain_mcmcs_s, map_solns, res_std_ppm, phots_std_ppm,\
-        res_diff_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers = \
-        extract_map_only_data(planet, idx_fwd, idx_rev,
-                              maps_only_filename=maps_only_filename)
+        # filename = 'decor_span_MAPs_only_aper_columns_list.joblib.save'
+        # filename = os.path.join(data_dir, filename)
 
-    # filename = 'decor_span_MAPs_only_aper_columns_list.joblib.save'
-    # filename = os.path.join(data_dir, filename)
-
-    decor_results_df = create_results_df(aper_widths,
-                                         aper_heights,
-                                         res_std_ppm,
-                                         sdnr_apers,
-                                         chisq_apers,
-                                         aic_apers,
-                                         bic_apers,
-                                         idx_split,
-                                         use_xcenters,
-                                         use_ycenters,
-                                         use_trace_angles,
-                                         use_trace_lengths)
+        decor_results_df = create_results_df(aper_widths,
+                                             aper_heights,
+                                             res_std_ppm,
+                                             sdnr_apers,
+                                             chisq_apers,
+                                             aic_apers,
+                                             bic_apers,
+                                             idx_split,
+                                             use_xcenters,
+                                             use_ycenters,
+                                             use_trace_angles,
+                                             use_trace_lengths)
+    except Exception as err:
+        warning_message(f'{err}')
 
     # mcmc_13x45_filename = 'results_decor_span_MCMCs_25_bestest_SDNR_'\
     #     'aperture_sum_13x45.joblib.save'
@@ -154,7 +159,10 @@ if __name__ == '__main__':
     map_soln_key = f'{map_soln_key}-_use_trace_angles:{toggle_trace_angles}'
     map_soln_key = f'{map_soln_key}-_use_trace_lengths:{toggle_trace_lengths}'
 
-    map_soln = map_solns[map_soln_key]
+    try:
+        map_soln = map_solns[map_soln_key]
+    except Exception as err:
+        warning_message(f'{err}')
 
     varnames = mcmc_samples_df.columns
     # varnames = [key for key in map_soln.keys()
@@ -194,6 +202,23 @@ if __name__ == '__main__':
 
     # Check if you can plot
     if not cannot_plot:
+        # Values from L.C. Mayorga predictions
+        eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
+                          'fsed=0.1': [96.379104 / ppm, ':']}
+        aper_column = 'aperture_sum_13x45'
+
+        try:
+            ax.clear()
+        except:
+            fig, ax = plt.subplots()
+
+        ax = plotting.plot_set_of_models(planet, best_mcmc_params,
+                                         eclipse_depths, wasp43,
+                                         aper_column=aper_column,
+                                         n_pts_th=1000, t0_base=t0_guess,
+                                         include_null=False, plot_raw=False,
+                                         ax=ax)
+
         pygtc.plotGTC(plot_samples_df,
                       plotName=plotName,
                       smoothingKernel=smoothingKernel,
@@ -217,18 +242,6 @@ if __name__ == '__main__':
             wspace=0.01
         )
 
-        # Values from L.C. Mayorga predictions
-        eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
-                          'fsed=0.1': [96.379104 / ppm, ':']}
-        aper_column = 'aperture_sum_13x45'
-
-        fig, ax = plt.subplots()
-        ax = plotting.plot_set_of_models(planet, best_mcmc_params,
-                                         eclipse_depths, wasp43,
-                                         aper_column=aper_column,
-                                         n_pts_th=1000, t0_base=t0_guess,
-                                         plot_raw=True, ax=ax)
-
         # ax = plotting.plot_best_aic_light_curve(
         #     planet, map_solns, decor_results_df,
         #     aic_apers,  keys_list,
@@ -249,42 +262,75 @@ if __name__ == '__main__':
                                            t0_base=t0_guess,
                                            ax=ax)
         axs = None  # for starters and re-starters
+        focus = 'AIC'
         axs = plotting.plot_32_subplots_for_each_feature(
             aper_widths, aper_heights,
             res_std_ppm, sdnr_apers, chisq_apers, aic_apers, bic_apers,
             idx_split, use_xcenters, use_ycenters, use_trace_angles,
-            use_trace_lengths, one_fig=True, focus='aic', axs=axs)
+            use_trace_lengths, one_fig=True, focus=focus.lower(), axs=axs)
+
+        plot_name_ = 'New_Plot_32_subplots_for_each_feature_'
+        plot_name_ = f'{plot_name_}{focus}_sorted.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_aperture_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         ax = plotting.plot_columwise_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_columnwise_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         ax = plotting.plot_trace_angle_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_trace_angles_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         ax = plotting.plot_trace_length_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_trace_lengths_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         ax = plotting.plot_xcenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_x-center_position_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         ax = plotting.plot_ycenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
+        plot_name_ = 'plasma_y-center_position_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_center_position_vs_scan_and_orbit(
-            planet, ax=ax, t0_base=0, size=200, include_orbits='only_the_first')
+            planet, ax=ax, t0_base=0, size=200,
+            include_orbits='only_the_first')
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_position_vs_trace_length(
             planet, ax=ax, t0_base=0, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_lengths_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
         fine_min_aic_colname = f'{fine_min_aic_colname}x{aper_height_bic_best}'
@@ -300,6 +346,8 @@ if __name__ == '__main__':
             convert_to_ppm=True, fontsize=40,
             leg_fontsize=30, xlim=None, fig=None,
             ax=ax)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         trace_lengths = planet.trace_lengths
         ax = plotting.plot_2D_fit_time_vs_other(
@@ -309,6 +357,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xcenters = planet.trace_xcenters
         ax = plotting.plot_2D_fit_time_vs_other(
@@ -318,6 +368,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
         ycenters = planet.trace_ycenters
@@ -328,6 +380,8 @@ if __name__ == '__main__':
             convert_to_ppm=False, lw=5, fontsize=40,
             leg_fontsize=30, units='pixels', xticks=xticks,
             xlim=None, fig=None, ax=ax)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         kernels = ('gaussian', 'tophat', 'epanechnikov',
                    'exponential', 'linear', 'cosine')
@@ -337,9 +391,14 @@ if __name__ == '__main__':
         ax = plotting.plot_kde_with_BCR_annotation(mcmc_samples_df,
                                                    kernel='gaussian',
                                                    ax=ax, fontsize=30)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = plotting.plot_aperture_edges_with_angle(
             planet, img_id=42, fontsize=40, axs=axs)
+
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
 
         from photutils import RectangularAperture
         pos_median = (np.median(planet.trace_xcenters),
@@ -369,3 +428,5 @@ if __name__ == '__main__':
                                      inner_annular=inner_annular,
                                      outer_annular=outer_annular,
                                      lw=5)
+        plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        fig.savefig(os.path.join(plot_dir, plot_name_))
