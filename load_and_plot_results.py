@@ -5,7 +5,7 @@ try:
     mpl_use('Qt5Agg')
 except Exception as err:
     cannot_plot = True
-    print(f'[WARNING] {err}')
+    warning_message(f'{err}')
 
 try:
     from matplotlib import pyplot as plt
@@ -13,8 +13,8 @@ try:
     from arctor import plotting
 except Exception as err:
     cannot_plot = True
-    print(f'[WARNING] {err}')
-    print(f'          You probably are running on a remote server')
+    warning_message(f'{err}' +
+                    '\n          You probably are running on a remote server')
 
 import joblib
 import numpy as np
@@ -23,7 +23,7 @@ import pandas as pd
 
 from arctor import Arctor
 from arctor.utils import extract_map_only_data, create_results_df
-from arctor.utils import setup_and_plot_GTC, info_message
+from arctor.utils import setup_and_plot_GTC, info_message, warning_message
 
 from exomast_api import exoMAST_API
 from tqdm import tqdm
@@ -32,6 +32,7 @@ if __name__ == '__main__':
 
     HOME = os.environ['HOME']
 
+    ppm = 1e6
     plot_verbose = False
     save_now = False
     planet_name = 'WASP43'
@@ -41,21 +42,24 @@ if __name__ == '__main__':
     aper_width_bic_best = 13
     aper_height_bic_best = 45
 
-    # core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
-    core_dir = os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')
+    if os.path.exists(os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')):
+        core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
+    elif os.path.exists(
+            os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')):
+        core_dir = os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')
+    else:
+        core_dir = 'None'
+        warning_message('No path exists to `core_dir`; setting to "None"')
 
     if not os.path.exists(core_dir):
         core_dir = os.path.join(HOME, 'Research', 'Planets')
         assert(os.path.exists(core_dir)),\
             'Did not find either Laptop or Server Directory Structure'
-        print('Found Server Directory Structure:')
-    else:
-        print('Found Laptop Directory Structure:')
 
-    print(core_dir)
+    info_message(f'Setting `core_dir` to {core_dir}')
 
-    save_dir = os.path.join(core_dir, 'savefiles')
     base_dir = os.path.join(core_dir, 'WASP43')
+    save_dir = os.path.join(base_dir, 'savefiles')
 
     data_dir = os.path.join(base_dir, 'data', 'UVIS', 'MAST_2019-07-03T0738')
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
@@ -182,7 +186,6 @@ if __name__ == '__main__':
                    'X-Center Slope', 'Y-Center Slope',
                    'Trace Length Slope']
 
-    ppm = 1e6
     plot_samples_df = mcmc_samples_df.copy()
     for colname in ppm_columns:
         plot_samples_df[colname] = plot_samples_df[colname] * ppm

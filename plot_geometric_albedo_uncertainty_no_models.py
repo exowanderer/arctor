@@ -107,13 +107,13 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
                     fontsize=fontsize, rotation=rotation, color=fontcolor)
 
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(fontsize)
+        tick.label.set_fontsize(1.5 * fontsize)
 
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(fontsize)
+        tick.label.set_fontsize(1.5 * fontsize)
 
-    ax.set_ylabel('Geometric Albedo', fontsize=fontsize)
-    ax.set_xlabel('Equilibrium Temperature [k]', fontsize=fontsize)
+    ax.set_ylabel('Geometric Albedo', fontsize=1.5 * fontsize)
+    ax.set_xlabel('Equilibrium Temperature [K]', fontsize=1.5 * fontsize)
     ax.set_ylim(ylims)
     ax.set_xlim(xlims)
     ax.grid(True)
@@ -157,6 +157,8 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
 
     if show_now:
         plt.show()
+
+    return ax
 
 
 def plot_Teq_vs_logg(planet_data, deltaLoggs=None, fontsize=20,
@@ -499,19 +501,20 @@ deltaTs = {'WASP-52b': 20,
 
 
 print('[INFO] Commensing Plot Without Point')
-plot_geometric_albedos_vs_models(models=[],
-                                 planet_bayes_test={},
-                                 planet_data={},
-                                 pub_data=black_dots,
-                                 deltaTs=deltaTs,
-                                 idx_use=idx_use,
-                                 ms=ms,
-                                 wiggle=wiggle,
-                                 squidge=wiggle,
-                                 ylims=ylims,
-                                 xlims=xlims,
-                                 text_height=text_height,
-                                 colors=hexcolor,
-                                 show_now=show_now,
-                                 ax=ax,
-                                 save_name=None)
+ax = plot_geometric_albedos_vs_models(models=[],
+                                      planet_bayes_test={},
+                                      planet_data={},
+                                      pub_data=black_dots,
+                                      deltaTs=deltaTs,
+                                      idx_use=idx_use,
+                                      ms=ms,
+                                      wiggle=wiggle,
+                                      squidge=wiggle,
+                                      ylims=ylims,
+                                      xlims=xlims,
+                                      fontsize=20,
+                                      text_height=text_height,
+                                      colors=hexcolor,
+                                      show_now=show_now,
+                                      ax=ax,
+                                      save_name=None)
