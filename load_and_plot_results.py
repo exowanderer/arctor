@@ -65,7 +65,7 @@ if __name__ == '__main__':
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
 
     working_dir = os.path.join(base_dir, 'github_analysis')
-    plot_dir = os.path.join(working_dir, 'paper', 'figures')
+    plot_dir = os.path.join(working_dir, 'paper', 'figures', 'pdfs')
     notebook_dir = os.path.join(working_dir, 'notebooks')
 
     planet = Arctor(planet_name, data_dir, save_dir, file_type)
@@ -264,6 +264,10 @@ if __name__ == '__main__':
                                            aper_height_bic_best,
                                            t0_base=t0_guess,
                                            ax=ax)
+        plot_name_ = 'plasma_flux_vs_time_raw.pdf'
+        plt.tight_layout()
+        fig.savefig(os.path.join(plot_dir, plot_name_))
+
         axs = None  # for starters and re-starters
         for focus in ['AIC', 'BIC', 'SDNR', 'CHISQ']:
             axs = plotting.plot_32_subplots_for_each_feature(
@@ -275,65 +279,77 @@ if __name__ == '__main__':
             plot_name_ = 'New_Plot_32_subplots_for_each_feature_'
             plot_name_ = plot_name_ + f'{focus}_sorted.pdf'
             fig = plt.gcf()
+            plt.tight_layout()
             fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_aperture_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_columwise_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_sky_background_columnwise_median_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_angle_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_angles_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_length_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_lengths_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_y-center_position_vs_time.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_center_position_vs_scan_and_orbit(
             planet, ax=ax, t0_base=0, size=200,
             include_orbits='only_the_first')
         plot_name_ = 'plasma_y-center_vs_x-center_position.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_position_vs_trace_length(
             planet, ax=ax, t0_base=0, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_trace_lengths.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_y-center_position_vs_flux.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_flux.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_lengths_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_lengths_vs_flux.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
@@ -350,8 +366,9 @@ if __name__ == '__main__':
             convert_to_ppm=True, fontsize=40,
             leg_fontsize=30, xlim=None, fig=None,
             ax=ax)
-        plot_name_ = 'Plasma Flux 2D correlation plot with model'
-        plot_name_ = plot_name_ + ' - trace angles - long.pdf'
+        plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
+        plot_name_ = plot_name_ + '_trace-angles_long.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         trace_lengths = planet.trace_lengths
@@ -362,8 +379,9 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'Plasma Flux 2D correlation plot with model'
-        plot_name_ = plot_name_ + ' - trace lengths - long.pdf'
+        plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
+        plot_name_ = plot_name_ + '_trace-lengths_long.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xcenters = planet.trace_xcenters
@@ -374,8 +392,9 @@ if __name__ == '__main__':
             convert_to_ppm=False, fontsize=40,
             leg_fontsize=30, units='pixels',
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'Plasma Flux 2D correlation plot with model'
-        plot_name_ = plot_name_ + ' - xcenters - long.pdf'
+        plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
+        plot_name_ = plot_name_ + '_xcenters_long.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
@@ -387,8 +406,9 @@ if __name__ == '__main__':
             convert_to_ppm=False, lw=5, fontsize=40,
             leg_fontsize=30, units='pixels', xticks=xticks,
             xlim=None, fig=None, ax=ax)
-        plot_name_ = 'Plasma Flux 2D correlation plot with model'
-        plot_name_ = plot_name_ + ' - ycenters - long.pdf'
+        plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
+        plot_name_ = plot_name_ + '_ycenters_long.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         kernels = ('gaussian', 'tophat', 'epanechnikov',
@@ -401,11 +421,22 @@ if __name__ == '__main__':
                                                    ax=ax, fontsize=30)
         plot_name_ = 'Plasma_Fancy_Histogram_and_KDE_Eclipse_Depth_MCMC_for_'\
             'best_MAP_fit_13x45_Square_take2.pdf'
+        plt.tight_layout()
+        plt.subplots_adjust(
+            top=0.995,
+            bottom=0.1,
+            left=0.45,
+            right=0.97,
+            hspace=0.01,
+            wspace=0.01,
+        )
+
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = plotting.plot_aperture_edges_with_angle(
             planet, img_id=42, fontsize=40, axs=axs)
         plot_name_ = 'New_WASP43_UVIS_aperture_zoom_before_and_after_tilt.pdf'
+        plt.tight_layout()
         fig.savefig(os.path.join(plot_dir, plot_name_))
 
         from photutils import RectangularAperture
@@ -435,7 +466,7 @@ if __name__ == '__main__':
                                      aperture=aperture,
                                      inner_annular=inner_annular,
                                      outer_annular=outer_annular,
-                                     lw=5)
+                                     lw=5, ax=ax)
         plot_name_ = 'New_WASP43_UVIS_aperture_photometry_'
         plot_name_ = plot_name_ + 'and_median_background.pdf'
         fig.savefig(os.path.join(plot_dir, plot_name_))
