@@ -105,6 +105,17 @@ venv.bak/
 *backups*
 *figures*
 *savefiles*
+*.save
 *.csv
 *.zip
 *.gz
+*.bib
+*.sh
+*.odt
+*.list
+*draft*
+*notes*
+*backup*
+*deleteme*
+*orig*
+.DS_Store
