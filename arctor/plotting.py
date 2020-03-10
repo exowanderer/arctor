@@ -1469,9 +1469,113 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
     return ax
 
 
+def plot_predictions_with_wasp43(
+        planet, mcmc_params, eclipse_depths, planet_params,
+        aper_column, n_pts_th=int(1e5), t0_base=0,
+        min_yscale=1.4, max_yscale=1.4, error_scale=1.0,
+        base_ppm=124, limb_dark=[0], plot_raw=False, xlims=[-0.1, 0.1],
+        ax=None, fontsize=40, leg_fontsize=23, include_null=False):
+
+    ppm = 1e6
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
+
+    idx_fwd = planet.idx_fwd
+    idx_rev = planet.idx_rev
+    times = planet.times
+    times_th = np.linspace(times.min(), times.max() + 0.1, n_pts_th)
+
+    period = planet_params.orbital_period
+    t0 = t0_base
+    b = planet_params.impact_parameter
+    u = limb_dark
+
+    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
+    ycenters = planet.trace_ycenters - np.median(planet.trace_ycenters)
+    trace_angles = planet.trace_angles - np.median(planet.trace_angles)
+    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+
+    eclipse_model, line_model = compute_line_and_eclipse_models(
+        mcmc_params, times, t0, u, period, b,
+        xcenters=xcenters, ycenters=ycenters,
+        trace_angles=trace_angles, trace_lengths=trace_lengths,
+        times_th=times_th, eclipse_depth=None)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    ax.clear()
+    phots = planet.normed_photometry_df[aper_column].values.copy()
+    uncs = planet.normed_uncertainty_df[aper_column].values.copy()
+
+    # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
+    # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
+    phots_corrected = (phots - line_model)
+    min_corrected = (phots_corrected.min() - min_yscale * np.max(uncs)) * ppm
+    max_corrected = (phots_corrected.max() + max_yscale * np.max(uncs)) * ppm
+
+    ax.errorbar(times[idx_fwd] - t0_base,
+                phots_corrected[idx_fwd] * ppm,
+                uncs[idx_fwd] * ppm * error_scale,
+                fmt='o', color='black', ms=10, zorder=10)
+
+    ax.errorbar(times[idx_rev] - t0_base,
+                phots_corrected[idx_rev] * ppm,
+                uncs[idx_rev] * ppm * error_scale,
+                fmt='o', color='black', ms=10, zorder=10)
+
+    # ax.plot(times_th - t0_base, eclipse_model * ppm,
+    #         color='C3', lw=5, zorder=5)
+
+    for label, (edepth, color) in eclipse_depths.items():
+        eclipse_model_, _ = compute_line_and_eclipse_models(
+            mcmc_params, times, t0, u, period, b,
+            xcenters=xcenters, ycenters=ycenters,
+            trace_angles=trace_angles, trace_lengths=trace_lengths,
+            times_th=times_th, eclipse_depth=edepth)
+
+        ax.plot(times_th - t0_base, eclipse_model_ * ppm,
+                color=color, lw=5, zorder=5)
+
+    # Build Legend
+    ax.errorbar([], [], [], label='GO-15476 Residuals',
+                fmt='o', color='black', ms=10, zorder=10)
+
+    for label, (edepth, color) in eclipse_depths.items():
+        ax.plot([], [], label=label, color=color, lw=5, zorder=5)
+
+    ax.set_ylim(min_corrected, max_corrected)
+    ax.set_xlim(xlims)
+    ax.set_xticks([-0.075, 0.0, 0.075])
+    ax.set_yticks([-500, -250, 0, 250, 500])
+    ax.set_xlabel('Time [Days from Eclipse]', fontsize=fontsize)
+    ax.set_ylabel('Normalized Flux [ppm]', fontsize=fontsize)
+
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_fontsize(fontsize)
+
+    ax.yaxis.tick_right()
+    for tick in ax.yaxis.get_major_ticks():
+        tick.label2.set_fontsize(fontsize)
+
+    ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.135),
+              fontsize=leg_fontsize, ncol=5, frameon=False)
+
+    plt.subplots_adjust(
+        top=0.915,
+        bottom=0.13,
+        left=0.04,
+        right=0.9,
+        hspace=0.01,
+        wspace=0.01
+    )
+
+    return ax
+
+
 def plot_raw_light_curve(planet, aper_width, aper_height,
                          lw=3, fontsize=40, leg_fontsize=30,
-                         t0_base=0, ax=None):
+                         t0_base=0, ax=None
+                         ):
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 

@@ -33,8 +33,9 @@ if __name__ == '__main__':
     HOME = os.environ['HOME']
 
     ppm = 1e6
-    plot_verbose = False
-    save_now = False
+
+    want_plot = False
+    save_plot_now = False
     planet_name = 'WASP43'
     file_type = 'flt.fits'
 
@@ -201,16 +202,59 @@ if __name__ == '__main__':
     plot_samples_df['mean'] = (plot_samples_df['mean'] - 1) * ppm
 
     # Check if you can plot
-    if not cannot_plot:
-        # Values from L.C. Mayorga predictions
-        eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
-                          'fsed=0.1': [96.379104 / ppm, ':']}
-        aper_column = 'aperture_sum_13x45'
+    if not cannot_plot and want_plot:
 
         try:
             ax.clear()
         except:
             fig, ax = plt.subplots()
+
+        # Values from Viviens predictions
+        n_colors = 8  # number of targets
+        color_array = np.array(plt.cm.plasma(np.linspace(0.1, 0.9, n_colors)))
+
+        colors_hex = []
+        for rgba in color_array:
+            rgb_ = np.round(rgba * 255).astype(int)[:3]
+            hex_ = '#%02x%02x%02x' % tuple(rgb_)
+            colors_hex.append(hex_)
+
+        eclipse_depths = {'WASP-52b': [271 / ppm, colors_hex[0]],
+                          'WASP-140b': [248 / ppm, colors_hex[1]],
+                          'WASP-43b': [536 / ppm, colors_hex[3]],
+                          'Qatar-1b': [310 / ppm, colors_hex[2]],
+                          'WASP-104b': [195 / ppm, colors_hex[4]],
+                          'WASP-95b': [150 / ppm, colors_hex[5]],
+                          'WASP-77b': [199 / ppm, colors_hex[6]],
+                          'TrES-3b': [385 / ppm, colors_hex[7]]}
+
+        eclipse_depths_scaled = {'WASP-52b': [487 / ppm, colors_hex[0]],
+                                 'WASP-140b': [683 / ppm, colors_hex[1]],
+                                 'Qatar-1b': [405 / ppm, colors_hex[2]],
+                                 'WASP-43b': [295 / ppm, colors_hex[3]],
+                                 'WASP-104b': [964 / ppm, colors_hex[4]],
+                                 'WASP-95b': [930 / ppm, colors_hex[5]],
+                                 'WASP-77b': [504 / ppm, colors_hex[6]],
+                                 'TrES-3b': [582 / ppm, colors_hex[7]]}
+
+        aper_column = 'aperture_sum_13x45'
+
+        ax = plotting.plot_predictions_with_wasp43(
+            planet, best_mcmc_params, eclipse_depths, wasp43,
+            aper_column=aper_column, n_pts_th=1000, t0_base=t0_guess,
+            error_scale=1.0, include_null=False, plot_raw=False,
+            min_yscale=1.7, max_yscale=1.7, ax=ax)  # min_yscale=6
+
+        fig = plt.gcf()
+        # plot_name_ = 'hst_cycle28_uvis_survey_target_scaled_predictions.pdf'
+        plot_name_ = 'hst_cycle28_uvis_survey_target_predictions.pdf'
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
+
+        # Values from L.C. Mayorga predictions
+        eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],
+                          'fsed=0.1': [96.379104 / ppm, ':']}
+        aper_column = 'aperture_sum_13x45'
 
         ax = plotting.plot_set_of_models(planet, best_mcmc_params,
                                          eclipse_depths, wasp43,
@@ -218,6 +262,12 @@ if __name__ == '__main__':
                                          n_pts_th=1000, t0_base=t0_guess,
                                          include_null=False, plot_raw=False,
                                          ax=ax)
+
+        fig = plt.gcf()
+        plot_name_ = 'plasma_flux_vs_time_new_mcmc_and_'
+        plot_name_ = plot_name_ + 'LCMayorga_predictions.pdf'
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         pygtc.plotGTC(plot_samples_df,
                       plotName=plotName,
@@ -243,7 +293,8 @@ if __name__ == '__main__':
         )
         fig = plt.gcf()
         plot_name_ = 'plasma_corner_plot_MAP_best_fit_13x45.pdf'
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         # ax = plotting.plot_best_aic_light_curve(
         #     planet, map_solns, decor_results_df,
@@ -266,7 +317,8 @@ if __name__ == '__main__':
                                            ax=ax)
         plot_name_ = 'plasma_flux_vs_time_raw.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = None  # for starters and re-starters
         for focus in ['AIC', 'BIC', 'SDNR', 'CHISQ']:
@@ -280,77 +332,89 @@ if __name__ == '__main__':
             plot_name_ = plot_name_ + f'{focus}_sorted.pdf'
             fig = plt.gcf()
             plt.tight_layout()
-            fig.savefig(os.path.join(plot_dir, plot_name_))
+            if save_plot_now:
+                fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_aperture_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_sky_background_aperture_median_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_columwise_background_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_sky_background_columnwise_median_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_angle_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_angles_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_length_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_lengths_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_time(
             planet, ax=ax, t0_base=t0_guess, size=200, include_orbits=False)
         plot_name_ = 'plasma_y-center_position_vs_time.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_center_position_vs_scan_and_orbit(
             planet, ax=ax, t0_base=0, size=200,
             include_orbits='only_the_first')
         plot_name_ = 'plasma_y-center_vs_x-center_position.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_position_vs_trace_length(
             planet, ax=ax, t0_base=0, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_trace_lengths.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_ycenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_y-center_position_vs_flux.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_xcenter_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_x-center_position_vs_flux.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         ax = plotting.plot_trace_lengths_vs_flux(
             planet, aper_width_bic_best, aper_height_bic_best,
             t0_base=0, ax=ax, size=200, include_orbits=False)
         plot_name_ = 'plasma_trace_lengths_vs_flux.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         fine_min_aic_colname = f'aperture_sum_{aper_width_bic_best}'
         fine_min_aic_colname = f'{fine_min_aic_colname}x{aper_height_bic_best}'
@@ -369,7 +433,8 @@ if __name__ == '__main__':
         plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
         plot_name_ = plot_name_ + '_trace-angles_long.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         trace_lengths = planet.trace_lengths
         ax = plotting.plot_2D_fit_time_vs_other(
@@ -382,7 +447,8 @@ if __name__ == '__main__':
         plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
         plot_name_ = plot_name_ + '_trace-lengths_long.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xcenters = planet.trace_xcenters
         ax = plotting.plot_2D_fit_time_vs_other(
@@ -395,7 +461,8 @@ if __name__ == '__main__':
         plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
         plot_name_ = plot_name_ + '_xcenters_long.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         xticks = [-0.150, -0.100, -0.050, 0.0, 0.050]
         ycenters = planet.trace_ycenters
@@ -409,7 +476,8 @@ if __name__ == '__main__':
         plot_name_ = 'Plasma_Flux_2D_correlation_plot_with_model'
         plot_name_ = plot_name_ + '_ycenters_long.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         kernels = ('gaussian', 'tophat', 'epanechnikov',
                    'exponential', 'linear', 'cosine')
@@ -431,13 +499,15 @@ if __name__ == '__main__':
             wspace=0.01,
         )
 
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         axs = plotting.plot_aperture_edges_with_angle(
             planet, img_id=42, fontsize=40, axs=axs)
         plot_name_ = 'New_WASP43_UVIS_aperture_zoom_before_and_after_tilt.pdf'
         plt.tight_layout()
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         from photutils import RectangularAperture
         pos_median = (np.median(planet.trace_xcenters),
@@ -469,4 +539,5 @@ if __name__ == '__main__':
                                      lw=5, ax=ax)
         plot_name_ = 'New_WASP43_UVIS_aperture_photometry_'
         plot_name_ = plot_name_ + 'and_median_background.pdf'
-        fig.savefig(os.path.join(plot_dir, plot_name_))
+        if save_plot_now:
+            fig.savefig(os.path.join(plot_dir, plot_name_))
