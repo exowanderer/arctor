@@ -330,7 +330,7 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
                    trace_angles=None, trace_lengths=None,
                    idx_fwd=None, idx_rev=None, tune=5000, draws=5000,
                    target_accept=0.9, do_mcmc=True, use_log_edepth=False,
-                   allow_negative_edepths=False):
+                   allow_negative_edepths=False, use_wavelets=False):
 
     if idx_fwd is None or idx_rev is None:
         # Make use of idx_fwd and idx_rev trivial
@@ -429,12 +429,29 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
             pm.Deterministic(f"light_curves{strrev}", light_curves_rev)
 
         # The likelihood function assuming known Gaussian uncertainty
-        pm.Normal(f"obs{strfwd}", mu=light_curve_fwd + line_fwd,
+        model_fwd = light_curve_fwd + line_fwd
+        pm.Normal(f"obs{strfwd}", mu=model_fwd,
                   sd=yerr[idx_fwd], observed=data[idx_fwd])
 
         if idx_rev is not None:
+            model_rev = light_curve_rev + line_rev
             pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
                       sd=yerr[idx_rev], observed=data[idx_rev])
+
+        if use_wavelets:
+            from .dwt.dwt_chisq import dwt_chisq
+            # lower = 1e-20, 1e-20, 1e-20
+            # upper = pi, 100, 100
+            gamma = pm.Uniform("log_gamma", lower=-20, upper=0.5)
+            sigma_r = pm.Uniform("log_sigma_r", lower=-20, upper=2)
+            sigma_w = pm.Uniform("log_sigma_w", lower=-20, upper=2)
+
+            gamma = pm.Deterministic("gamma", 10**(0.5 * log_edepth))
+            sigma_r = pm.Deterministic("sigma_r", 10**(0.5 * log_edepth))
+            sigma_w = pm.Deterministic("sigma_w", 10**(0.5 * log_edepth))
+
+            pm.Potential("dwt", dwt_chisq(
+                model_fwd, data, [gamma, sigma_r, sigma_w]))
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset
