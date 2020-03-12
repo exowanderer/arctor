@@ -325,21 +325,22 @@ def run_pymc3_direct(times, data, dataerr, t0, u, period, b, xcenters=None,
     return trace, map_soln
 
 
-def build_gp_pink_noise(time, data, dataerr, Q=1.0 / np.sqrt(2)):
+def build_gp_pink_noise(times, data, dataerr,
+                        log_Q=np.log(1.0 / np.sqrt(2))):
 
-    log_S0 = pm.Normal("log_S0", mu=0.0, sigma=15.0,
-                       testval=np.log(np.var(data)))
     log_w0 = pm.Normal("log_w0", mu=0.0, sigma=15.0,
                        testval=np.log(3.0))
-    log_sw4 = pm.Deterministic("log_variance_r", np.log(S0) + 4 * np.log(w0))
+    log_Sw4 = pm.Normal("log_variance_r", mu=0.0, sigma=15.0,
+                        testval=np.log(np.var(data)))
+    log_s2 = pm.Normal("log_variance_w", mu=0.0, sigma=15.0,
+                       testval=np.log(np.var(data)))
 
-    log_s2 = = pm.Normal("log_variance_w", mu=0.0, sigma=15.0,
-                         testval=np.log(np.var(data)))
+    kernel = xo.gp.terms.SHOTerm(
+        log_Sw4=log_Sw4, log_w0=log_w0, log_Q=log_Q)
 
-    kernel = xo.gp.terms.SHOTerm(log_Sw4=log_Sw4, log_w0=log_w0, log_Q=log_Q)
-    gp = xo.gp.GP(kernel, time, dataerr ** 2 + pm.math.exp(log_s2))
+    gp = xo.gp.GP(kernel, times, dataerr ** 2 + pm.math.exp(log_s2))
 
-    return pink_gp
+    return gp
 
 
 def run_pymc3_both(times, data, dataerr, t0, u, period, b,
@@ -456,7 +457,8 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
                       sd=dataerr[idx_rev], observed=data[idx_rev])
 
         if use_pink_gp:
-            gp = build_gp_pink_noise(Q=Q)
+            gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
+            gp.marginal("gp", observed=data)
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset

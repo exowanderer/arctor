@@ -110,6 +110,8 @@ def build_synthetic_model(min_phase=-0.1, max_phase=0.1, size=1000,
         period=planet.orbital_period,
         a=planet.a_Rs,
         # b=planet.impact_parameter,
+        # incl=planet.inclination * deg2rad,  # None,  #
+        duration=planet.transit_duration,  # None,  #
         ecc=planet.eccentricity,
         omega=planet.omega * deg2rad,
         m_planet=planet.Mp,
@@ -117,8 +119,6 @@ def build_synthetic_model(min_phase=-0.1, max_phase=0.1, size=1000,
 
         # Not in exoMAST or xo cannot use duplicates
         t_periastron=None,
-        incl=planet.inclination * deg2rad,  # None,  #
-        duration=None,  # planet.transit_duration,
         Omega=None,
         m_star=None,  # planet.Ms,
         rho_star=None,
@@ -229,8 +229,8 @@ if __name__ == '__main__':
 
     # # PyMC3 parameters
     log_Q = 1 / np.sqrt(2),
-    tune = 5000,
-    draws = 5000,
+    tune = 100,
+    draws = 100,
     target_accept = 0.9
 
     trace, map_soln, pm_model = run_pymc3_with_gp(times, data, dataerr, orbit,
