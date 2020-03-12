@@ -100,7 +100,7 @@ def setup_and_plot_GTC(mcmc_fit, plotName='',
                   nContourLevels=3, figureSize='MNRAS_page')
 
 
-def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
+def run_pymc3_multi_dataset(times, data, dataerr, t0, u, period, b,
                             idx_fwd, idx_rev, random_state=42,
                             xcenters=None, tune=5000, draws=5000,
                             target_accept=0.9, do_mcmc=True,
@@ -142,7 +142,7 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
         pm.Deterministic("light_curves", light_curves)
 
         # The likelihood function assuming known Gaussian uncertainty
-        pm.Normal("obs", mu=light_curve, sd=yerr, observed=data)
+        pm.Normal("obs", mu=light_curve, sd=dataerr, observed=data)
 
         # Fit for the maximum a posteriori parameters given the simuated
         # dataset
@@ -162,7 +162,7 @@ def run_pymc3_multi_dataset(times, data, yerr, t0, u, period, b,
     return trace, map_soln
 
 
-def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
+def run_pymc3_fwd_rev(times, data, dataerr, t0, u, period, b, idx_fwd, idx_rev,
                       xcenters=None, tune=5000, draws=5000, target_accept=0.9,
                       do_mcmc=True, use_log_edepth=False,
                       allow_negative_edepths=False):
@@ -216,9 +216,9 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
 
         # # The likelihood function assuming known Gaussian uncertainty
         pm.Normal("obs_fwd", mu=light_curve_fwd + line_fwd,
-                  sd=yerr[idx_fwd], observed=data[idx_fwd])
+                  sd=dataerr[idx_fwd], observed=data[idx_fwd])
         pm.Normal("obs_rev", mu=light_curve_rev + line_rev,
-                  sd=yerr[idx_rev], observed=data[idx_rev])
+                  sd=dataerr[idx_rev], observed=data[idx_rev])
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset
@@ -246,7 +246,7 @@ def run_pymc3_fwd_rev(times, data, yerr, t0, u, period, b, idx_fwd, idx_rev,
     return trace, map_soln
 
 
-def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
+def run_pymc3_direct(times, data, dataerr, t0, u, period, b, xcenters=None,
                      tune=5000, draws=5000, target_accept=0.9, do_mcmc=True,
                      use_log_edepth=False, allow_negative_edepths=False):
 
@@ -290,7 +290,7 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
         model_ = light_curve + line
 
         # The likelihood function assuming known Gaussian uncertainty
-        pm.Normal("obs", mu=model_, sd=yerr, observed=data)
+        pm.Normal("obs", mu=model_, sd=dataerr, observed=data)
 
         # Fit for the maximum a posteriori parameters given the simuated
         # dataset
@@ -325,12 +325,29 @@ def run_pymc3_direct(times, data, yerr, t0, u, period, b, xcenters=None,
     return trace, map_soln
 
 
-def run_pymc3_both(times, data, yerr, t0, u, period, b,
+def build_gp_pink_noise(time, data, dataerr, Q=1.0 / np.sqrt(2)):
+
+    log_S0 = pm.Normal("log_S0", mu=0.0, sigma=15.0,
+                       testval=np.log(np.var(data)))
+    log_w0 = pm.Normal("log_w0", mu=0.0, sigma=15.0,
+                       testval=np.log(3.0))
+    log_sw4 = pm.Deterministic("log_variance_r", np.log(S0) + 4 * np.log(w0))
+
+    log_s2 = = pm.Normal("log_variance_w", mu=0.0, sigma=15.0,
+                         testval=np.log(np.var(data)))
+
+    kernel = xo.gp.terms.SHOTerm(log_Sw4=log_Sw4, log_w0=log_w0, log_Q=log_Q)
+    gp = xo.gp.GP(kernel, time, dataerr ** 2 + pm.math.exp(log_s2))
+
+    return pink_gp
+
+
+def run_pymc3_both(times, data, dataerr, t0, u, period, b,
                    xcenters=None, ycenters=None,
-                   trace_angles=None, trace_lengths=None,
+                   trace_angles=None, trace_lengths=None, log_Q=1 / np.sqrt(2),
                    idx_fwd=None, idx_rev=None, tune=5000, draws=5000,
                    target_accept=0.9, do_mcmc=True, use_log_edepth=False,
-                   allow_negative_edepths=False, use_wavelets=False):
+                   allow_negative_edepths=False, use_pink_gp=False):
 
     if idx_fwd is None or idx_rev is None:
         # Make use of idx_fwd and idx_rev trivial
@@ -431,27 +448,15 @@ def run_pymc3_both(times, data, yerr, t0, u, period, b,
         # The likelihood function assuming known Gaussian uncertainty
         model_fwd = light_curve_fwd + line_fwd
         pm.Normal(f"obs{strfwd}", mu=model_fwd,
-                  sd=yerr[idx_fwd], observed=data[idx_fwd])
+                  sd=dataerr[idx_fwd], observed=data[idx_fwd])
 
         if idx_rev is not None:
             model_rev = light_curve_rev + line_rev
             pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
-                      sd=yerr[idx_rev], observed=data[idx_rev])
+                      sd=dataerr[idx_rev], observed=data[idx_rev])
 
-        if use_wavelets:
-            from .dwt.dwt_chisq import dwt_chisq
-            # lower = 1e-20, 1e-20, 1e-20
-            # upper = pi, 100, 100
-            gamma = pm.Uniform("log_gamma", lower=-20, upper=0.5)
-            sigma_r = pm.Uniform("log_sigma_r", lower=-20, upper=2)
-            sigma_w = pm.Uniform("log_sigma_w", lower=-20, upper=2)
-
-            gamma = pm.Deterministic("gamma", 10**(0.5 * log_edepth))
-            sigma_r = pm.Deterministic("sigma_r", 10**(0.5 * log_edepth))
-            sigma_w = pm.Deterministic("sigma_w", 10**(0.5 * log_edepth))
-
-            pm.Potential("dwt", dwt_chisq(
-                model_fwd, data, [gamma, sigma_r, sigma_w]))
+        if use_pink_gp:
+            gp = build_gp_pink_noise(Q=Q)
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset
@@ -510,11 +515,11 @@ def run_multiple_pymc3(times, fine_snr_flux, fine_snr_uncs, aper_sum_columns,
         start = time()
         info_message(f'Working on {colname} for MAP/Trace MCMCs')
         data = fine_snr_flux[colname] * injected_light_curve
-        yerr = fine_snr_uncs[colname]
+        dataerr = fine_snr_uncs[colname]
 
         if use_rev_fwd_split:
             trace, map_soln = run_pymc3_fwd_rev(
-                times, data, yerr, t0, u, period, b,
+                times, data, dataerr, t0, u, period, b,
                 idx_fwd, idx_rev, xcenters,
                 tune=tune, draws=draws,
                 target_accept=target_accept,
@@ -524,7 +529,7 @@ def run_multiple_pymc3(times, fine_snr_flux, fine_snr_uncs, aper_sum_columns,
             )
         else:
             trace, map_soln = run_pymc3_direct(
-                times, data, yerr,
+                times, data, dataerr,
                 t0, u, period, b, xcenters,
                 tune=tune, draws=draws,
                 target_accept=target_accept,
@@ -1391,20 +1396,20 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
     aic_sub_min = aic_apers[sub_sect].min()
 
     entry = {f'idx_split': idx_split_,
-              f'xcenters': use_xcenters_,
-              f'ycenters': use_ycenters_,
-              f'trace_angles': use_trace_angles_,
-              f'trace_lengths': use_trace_lengths_,
-              f'width_best': width_best,
-              f'height_best': height_best,
-              f'best_ppm_sub': best_ppm_sub,
-              f'best_sdnr_sub': best_sdnr_sub,
-              f'best_chisq_sub': best_chisq_sub,
-              f'best_aic_sub': best_aic_sub,
-              f'std_res_sub_min': std_res_sub_min,
-              f'sdnr_res_sub_min': sdnr_res_sub_min,
-              f'chisq_sub_min': chisq_sub_min,
-              f'aic_sub_min': aic_sub_min}
+             f'xcenters': use_xcenters_,
+             f'ycenters': use_ycenters_,
+             f'trace_angles': use_trace_angles_,
+             f'trace_lengths': use_trace_lengths_,
+             f'width_best': width_best,
+             f'height_best': height_best,
+             f'best_ppm_sub': best_ppm_sub,
+             f'best_sdnr_sub': best_sdnr_sub,
+             f'best_chisq_sub': best_chisq_sub,
+             f'best_aic_sub': best_aic_sub,
+             f'std_res_sub_min': std_res_sub_min,
+             f'sdnr_res_sub_min': sdnr_res_sub_min,
+             f'chisq_sub_min': chisq_sub_min,
+             f'aic_sub_min': aic_sub_min}
 
     return entry
 
