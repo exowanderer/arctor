@@ -338,9 +338,7 @@ def build_gp_pink_noise(times, data, dataerr,
     kernel = xo.gp.terms.SHOTerm(
         log_Sw4=log_Sw4, log_w0=log_w0, log_Q=log_Q)
 
-    gp = xo.gp.GP(kernel, times, dataerr ** 2 + pm.math.exp(log_s2))
-
-    return gp
+    return xo.gp.GP(kernel, times, dataerr ** 2 + pm.math.exp(log_s2))
 
 
 def run_pymc3_both(times, data, dataerr, t0, u, period, b,
@@ -367,10 +365,10 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
     with pm.Model() as model:
 
         # The baseline flux
-        mean_fwd = pm.Normal(f"mean{strfwd}", mu=1.0, sd=1.0)
+        mean_fwd = pm.Normal(f"mean{strfwd}", mu=0.0, sd=1.0)
 
         if idx_rev is not None:
-            mean_rev = pm.Normal(f"mean{strrev}", mu=1.0, sd=1.0)
+            mean_rev = pm.Normal(f"mean{strrev}", mu=0.0, sd=1.0)
 
         assert(not (allow_negative_edepths and use_log_edepth)),\
             'Cannot have `allow_negative_edepths` with `use_log_edepth`'
@@ -442,23 +440,29 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
 
         # # Here we track the value of the model light curve for plotting
         # # purposes
-        pm.Deterministic(f"light_curves{strfwd}", light_curves_fwd)
+        pm.Deterministic(f"light_curves{strfwd}", light_curve_fwd)
         if idx_rev is not None:
-            pm.Deterministic(f"light_curves{strrev}", light_curves_rev)
+            pm.Deterministic(f"light_curves{strrev}", light_curve_rev)
 
         # The likelihood function assuming known Gaussian uncertainty
         model_fwd = light_curve_fwd + line_fwd
-        pm.Normal(f"obs{strfwd}", mu=model_fwd,
-                  sd=dataerr[idx_fwd], observed=data[idx_fwd])
-
         if idx_rev is not None:
             model_rev = light_curve_rev + line_rev
-            pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
-                      sd=dataerr[idx_rev], observed=data[idx_rev])
 
         if use_pink_gp:
-            gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
-            gp.marginal("gp", observed=data)
+            gp = build_gp_pink_noise(
+                times, data, dataerr, log_Q=log_Q)
+            # gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
+            # mu, _ = xo.eval_in_model(model.test_point)
+
+            gp.marginal("gp", observed=data - model_fwd.flatten())
+        else:
+            pm.Normal(f"obs{strfwd}", mu=model_fwd,
+                      sd=dataerr[idx_fwd], observed=data[idx_fwd])
+
+            if idx_rev is not None:
+                pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
+                          sd=dataerr[idx_rev], observed=data[idx_rev])
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset
@@ -482,6 +486,120 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
             )
         else:
             trace = None
+
+    return trace, map_soln
+
+
+def run_pymc3_w_gp(times, data, dataerr, t0, u, period, b,
+                   xcenters=None, ycenters=None,
+                   trace_angles=None, trace_lengths=None,
+                   log_Q=1 / np.sqrt(2), tune=5000, draws=5000,
+                   target_accept=0.9, do_mcmc=False, normalize=False,
+                   use_pink_gp=False, verbose=False):
+
+    times_bg = times - np.median(times)
+    with pm.Model() as model:
+
+        # The baseline flux
+        mean = pm.Normal(f"mean", mu=0.0, sd=1.0)
+
+        edepth = pm.Uniform("edepth", lower=0, upper=0.01)
+        edepth = pm.math.sqrt(edepth)
+
+        slope_time = pm.Uniform("slope_time", lower=-1, upper=1)
+        line_model = mean + slope_time * times_bg
+
+        if xcenters is not None:
+            med_ = np.median(xcenters)
+            std_ = np.std(xcenters)
+            xcenters = (xcenters - med_) / std_ if normalize else xcenters
+
+            slope_xc = pm.Uniform("slope_xcenter", lower=-1, upper=1)
+            line_model = line_model + slope_xc * xcenters
+
+        if ycenters is not None:
+            med_ = np.median(ycenters)
+            std_ = np.std(ycenters)
+            ycenters = (ycenters - med_) / std_ if normalize else ycenters
+
+            slope_yc = pm.Uniform("slope_ycenter", lower=-1, upper=1)
+            line_model = line_model + slope_yc * ycenters
+
+        if trace_angles is not None:
+            med_ = np.median(trace_angles)
+            std_ = np.std(trace_angles)
+            if normalize:
+                trace_angles = (trace_angles - med_) / std_
+
+            slope_angles = pm.Uniform("slope_trace_angle", lower=-1, upper=1)
+            line_model = line_model + slope_angles * trace_angles
+
+        if trace_lengths is not None:
+            med_ = np.median(trace_lengths)
+            std_ = np.std(trace_lengths)
+            if normalize:
+                trace_lengths = (trace_lengths - med_) / std_
+
+            slope_tl = pm.Uniform("slope_trace_length", lower=-1, upper=1)
+            line_model = line_model + slope_tl * trace_lengths
+
+        pm.Deterministic(f'line_model', line_model)
+
+        # Set up a Keplerian orbit for the planets
+        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
+
+        # # Compute the model light curve using starry
+        star = xo.LimbDarkLightCurve(u)
+        light_curves = star.get_light_curve(
+            orbit=orbit, r=edepth, t=times)
+
+        light_curve = pm.math.sum(light_curves, axis=-1)
+
+        # # Here we track the value of the model light curve for plotting
+        # # purposes
+        pm.Deterministic("light_curve", light_curve)
+
+        # The likelihood function assuming known Gaussian uncertainty
+        model_full = light_curve + line_model
+
+        if use_pink_gp:
+            gp = build_gp_pink_noise(
+                times, data, dataerr, log_Q=log_Q)
+            # gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
+            # mu, _ = xo.eval_in_model(model.test_point)
+
+            gp.marginal("gp", observed=data - model_full.flatten())
+
+            mu, _ = gp.predict(times, return_var=True, predict_mean=True)
+            # pm.Deterministic("light_curve", light_curve)
+            # help(pm.Deterministic)
+            # print(type("light_curve2"))
+            pm.Deterministic(name="gp_mu", var=mu)
+
+        else:
+            pm.Normal(f"obs", mu=model_full, sd=dataerr, observed=data)
+
+        # with pm.Model() as model:
+        # Fit for the maximum a posteriori parameters
+        #   given the simuated dataset
+        map_soln = xo.optimize(start=model.test_point)
+
+        if verbose:
+            ppm = 1e6
+            info_message(f'Map Soln Edepth:{map_soln["edepth"]*ppm}')
+
+        # with pm.Model() as model:
+        np.random.seed(42)
+        trace = None
+        if do_mcmc:
+            trace = pm.sample(
+                tune=tune,
+                draws=tune,
+                start=map_soln,
+                chains=mp.cpu_count(),
+                step=xo.get_dense_nuts_step(target_accept=target_accept),
+                cores=mp.cpu_count()
+            )
 
     return trace, map_soln
 
@@ -1186,27 +1304,56 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
             ]
 
 
+def compute_delta_sdnr(map_soln, phots, idx_fwd, idx_rev):
+    ppm = 1e6
+    phots_std_fwd = phots[idx_fwd].std()
+    phots_std_rev = phots[idx_rev].std()
+    phots_std = np.mean([phots_std_fwd, phots_std_rev])
+
+    if 'mean_fwd' not in map_soln.keys():
+        map_model = map_soln['light_curve'].flatten() + map_soln['line_model']
+    else:
+        map_model = np.zeros_like(times)
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten() + \
+            map_soln['line_model_fwd']
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten() + \
+            map_soln['line_model_rev']
+
+    varnames = [key for key in map_soln.keys(
+    ) if '__' not in key and 'light' not in key and 'line' not in key and 'le_edepth_0' not in key]
+
+    res_fwd = np.std(map_model[idx_fwd] - phots[idx_fwd])
+    res_rev = np.std(map_model[idx_rev] - phots[idx_rev])
+    res_std = np.mean([res_fwd, res_rev])
+
+    print(f'{str(varnames):<80}')
+    print(f'{res_std*ppm:0.2f}, {phots_std*ppm:0.2f}, {(phots_std - res_std)*ppm:0.2f} ppm difference'),
+
+    return res_std * ppm, phots_std * ppm, (phots_std - res_std) * ppm
+
+
 def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
                       use_idx_fwd_, use_xcenters_, use_ycenters_,
-                      use_trace_angles_, use_trace_lengths_):
+                      use_trace_angles_, use_trace_lengths_, use_pink_gp):
     ppm = 1e6
 
     phots = planet.normed_photometry_df[aper_column].values
     uncs = planet.normed_uncertainty_df[aper_column].values
+    phots = phots - np.median(phots)
 
     n_pts = len(phots)
 
     # 2 == eclipse depth + mean
     n_params = (2 + use_idx_fwd_ + use_xcenters_ + use_ycenters_ +
-                use_trace_angles_ + use_trace_lengths_)
+                use_trace_angles_ + use_trace_lengths_ + 3 * use_pink_gp)
 
     if 'mean_fwd' not in map_soln.keys():
-        map_model = map_soln['light_curves'].flatten() + map_soln['line_model']
+        map_model = map_soln['light_curve'].flatten() + map_soln['line_model']
     else:
         map_model = np.zeros_like(planet.times)
-        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten() + \
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten() + \
             map_soln['line_model_fwd']
-        map_model[idx_rev] = map_soln['light_curves_rev'].flatten() + \
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten() + \
             map_soln['line_model_rev']
 
         # if we split Fwd/Rev, then there are now 2 means
@@ -1418,15 +1565,15 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
 
 def get_map_results_models(times, map_soln, idx_fwd, idx_rev):
     if 'mean_fwd' not in map_soln.keys():
-        map_model = map_soln['light_curves'].flatten()
+        map_model = map_soln['light_curve'].flatten()
         line_model = map_soln['line_model'].flatten()
     else:
         map_model = np.zeros_like(times)
         line_model = np.zeros_like(times)
-        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten()
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten()
         line_model[idx_fwd] = map_soln['line_model_fwd'].flatten()
 
-        map_model[idx_rev] = map_soln['light_curves_rev'].flatten()
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten()
         line_model[idx_rev] = map_soln['line_model_rev'].flatten()
 
     return map_model, line_model

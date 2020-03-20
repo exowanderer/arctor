@@ -76,7 +76,7 @@ def run_pymc3_with_gp(times, data, dataerr, orbit,
         pm.Normal("obs", mu=light_curve, sd=dataerr, observed=data)
 
         gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
-        gp.marginal("gp", observed=data)
+        gp.marginal("gp", observed=data - light_curve.flatten())
 
         # Fit for the maximum a posteriori parameters given the simuated
         # dataset
@@ -109,9 +109,9 @@ def build_synthetic_model(min_phase=-0.1, max_phase=0.1, size=1000,
         t0=t0,
         period=planet.orbital_period,
         a=planet.a_Rs,
-        # b=planet.impact_parameter,
+        b=planet.impact_parameter,
         # incl=planet.inclination * deg2rad,  # None,  #
-        duration=planet.transit_duration,  # None,  #
+        # duration=planet.transit_duration,  # None,  #
         ecc=planet.eccentricity,
         omega=planet.omega * deg2rad,
         m_planet=planet.Mp,
