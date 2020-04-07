@@ -264,7 +264,7 @@ black_dots['color'] = ['black'] * len(black_dots)
 black_dots['alpha'] = [1.0] * len(black_dots)
 black_dots['upperlimit'] = [False] * len(black_dots)
 
-n = 8
+n = 9
 color = plt.cm.plasma(linspace(0.1, 0.75, n))
 color = int32(color[:, 0:-1] * 255)
 hexcolor = ['#%02x%02x%02x' % (rgb[0], rgb[1], rgb[2]) for rgb in color]
@@ -278,7 +278,7 @@ hd189_unc = hd189stis['uncAg'].mean() / sqrt(len(hd189stis['uncAg']))
 
 # hd189point = 0.15867990829405226
 
-qatar2b = {'Planet Name': 'Qatar-2 b',
+qatar2b = {'Planet_Name': 'Qatar-2 b',
            'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
            'Tmax': None, 'Tmax-': None, 'Tmax+': None,
            'Ag,hom': 0, 'Ag,hom-': 0,
@@ -293,7 +293,7 @@ qatar2b = {'Planet Name': 'Qatar-2 b',
            'alpha': 1.0,
            'upperlimit': True}
 
-wasp104b = {'Planet Name': 'WASP-104 b',
+wasp104b = {'Planet_Name': 'WASP-104 b',
             'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
             'Tmax': None, 'Tmax-': None, 'Tmax+': None,
             'Ag,hom': 0.0211,
@@ -311,7 +311,7 @@ wasp104b = {'Planet Name': 'WASP-104 b',
             'alpha': 1.0,
             'upperlimit': False}
 
-k2_141b = {'Planet Name': 'K2-141 b',
+k2_141b = {'Planet_Name': 'K2-141 b',
            'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
            'Tmax': None, 'Tmax-': None, 'Tmax+': None,
            'Ag,hom': 0.205,
@@ -328,7 +328,7 @@ k2_141b = {'Planet Name': 'K2-141 b',
            'alpha': 1.0,
            'upperlimit': False}
 
-hd189b = {'Planet Name': 'HD 189733 b',
+hd189b = {'Planet_Name': 'HD 189733 b',
           'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
           'Tmax': None, 'Tmax-': None, 'Tmax+': None,
           'Ag,hom': hd189point,
@@ -345,7 +345,7 @@ hd189b = {'Planet Name': 'HD 189733 b',
           'alpha': 1.0,
           'upperlimit': False}
 
-corot2b = {'Planet Name': 'Corot-2 b',
+corot2b = {'Planet_Name': 'Corot-2 b',
            'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
            'Tmax': None, 'Tmax-': None, 'Tmax+': None,
            'Ag,hom': 0.09688,
@@ -362,7 +362,7 @@ corot2b = {'Planet Name': 'Corot-2 b',
            'alpha': 1.0,
            'upperlimit': True}
 
-hd209b = {'Planet Name': 'HD 209458 b',
+hd209b = {'Planet_Name': 'HD 209458 b',
           'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
           'Tmax': None, 'Tmax-': None, 'Tmax+': None,
           'Ag,hom': 0, 'Ag,hom-': 0,
@@ -378,7 +378,23 @@ hd209b = {'Planet Name': 'HD 209458 b',
           'alpha': 1.0,
           'upperlimit': True}
 
-wasp43b = {'Planet Name': 'WASP-43 b',
+wasp12b = {'Planet_Name': 'WASP-12 b',
+           'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
+           'Tmax': None, 'Tmax-': None, 'Tmax+': None,
+           'Ag,hom': 0, 'Ag,hom-': 0,
+           'Ag,hom+': 0.064,
+           'Thom': 2594.18,
+           'Thom-': 57,
+           'Thom+': 57,
+           'fref,max': None,
+           'fref,max-': None, 'fref,max+': None,
+           'fref,hom': None, 'fref,hom-': None, 'fref,hom+': None,
+           'plot': True,
+           'color': hexcolor[-9],
+           'alpha': 1.0,
+           'upperlimit': True}
+
+wasp43b = {'Planet_Name': 'WASP-43 b',
            'Ag,max': None, 'Ag,max-': None, 'Ag,max+': None,
            'Tmax': None, 'Tmax-': None, 'Tmax+': None,
            'Ag,hom': 0, 'Ag,hom-': 0,
@@ -400,10 +416,11 @@ black_dots = black_dots.append(k2_141b, ignore_index=True)
 black_dots = black_dots.append(hd189b, ignore_index=True)
 black_dots = black_dots.append(corot2b, ignore_index=True)
 black_dots = black_dots.append(hd209b, ignore_index=True)
+black_dots = black_dots.append(wasp12b, ignore_index=True)
 black_dots = black_dots.append(wasp43b, ignore_index=True)
 
-black_dots['Planet_Name'] = black_dots['Planet Name']
-del black_dots['Planet Name']
+# black_dots['Planet_Name'] = black_dots['Planet_Name']
+# del black_dots['Planet_Name']
 
 for colname in black_dots.columns:
     if ',' in colname:
@@ -418,6 +435,7 @@ idx_hd189 = int32(black_dots.query('Planet_Name == "HD 189733 b"').index)[0]
 idx_corot2 = int32(black_dots.query('Planet_Name == "Corot-2 b"').index)[0]
 idx_tres2 = int32(black_dots.query('Planet_Name == "TrES-2 b"').index)[0]
 idx_wasp43 = int32(black_dots.query('Planet_Name == "WASP-43 b"').index)[0]
+idx_wasp12 = int32(black_dots.query('Planet_Name == "WASP-12 b"').index)[0]
 idx_koi13bb = int32(black_dots.query('Planet_Name == "KOI-13 bb"').index)[0]
 
 black_dots.loc[idx_tres2, 'color'] = hexcolor[-6]
@@ -432,6 +450,7 @@ black_dots.loc[idx_k2141, 'Instrument'] = '(K2:600nm)'
 black_dots.loc[idx_hd189, 'Instrument'] = '(STIS:500nm)'
 black_dots.loc[idx_corot2, 'Instrument'] = '(CoRoT:700nm)'
 black_dots.loc[idx_tres2, 'Instrument'] = '(Kepler:600nm)'
+black_dots.loc[idx_wasp12, 'Instrument'] = '(STIS:430nm)'
 black_dots.loc[idx_wasp43, 'Instrument'] = '(UVIS:584nm; This Work)'
 
 wiggle = 0.2
