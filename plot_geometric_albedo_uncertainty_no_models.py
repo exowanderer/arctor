@@ -3,21 +3,21 @@
 from scipy.interpolate import CubicSpline
 from sklearn.externals import joblib
 from matplotlib import pyplot as plt
-from numpy import array, transpose, arange, append, random
-from numpy import loadtxt, sqrt, int32, linspace
-from pandas import read_csv, DataFrame
+
+import numpy as np
+import pandas as pd
 
 
 def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
                                      pub_data=[], deltaTs={}, idx_use=None,
                                      lw0=5, lw1=3, s=1, ylims=[0, 0.7],
-                                     xlims=[1000, 2100], text_height=0.7,
+                                     xlims=[1000, 2600], text_height=0.7,
                                      alpha=0.03, ms=10, rotation=90,
                                      fontcolor='black', seed=42, fontsize=20,
                                      colors=['blue', 'red'], wiggle=0.1,
                                      squidge=5, save_name=None, show_now=False,
-                                     ax=None):
-    random.seed(seed)
+                                     include_arrow=True, ax=None):
+    np.random.seed(seed)
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -26,7 +26,8 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
         model = model[['T_eq', 'Albedo']].iloc[idx_use]
         ax.plot(model['T_eq'].values, model['Albedo'].values,
                 lw=lw0, color=colors[k])
-
+    bbox = dict(facecolor='white', edgecolor='black',
+                boxstyle='round,pad=0.1', alpha=0.65, lw=0.05)
     for k, val in pub_data.T.iteritems():
 
         if not val['plot']:
@@ -49,11 +50,19 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
         y_mod = 0.01
         x_mod = -7
 
+        if pname == 'HD 189733 b':
+            y_mod = -0.125
+            x_mod = -35
+        if pname == 'Kepler-6 b':
+            x_mod = -15
+
         if uplim:
+            fontweight = None
+            lw = lw1
             if pname == 'WASP-43 b':
                 lw = 2 * lw1
-            else:
-                lw = lw1
+                fontweight = 'bold'
+                y_mod = 0.02
 
             ax.errorbar(x=x, y=yerr_u, uplims=uplim,
                         xerr=[[xerr_l], [xerr_u]], yerr=yerr_u,
@@ -61,7 +70,8 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
                         alpha=alpha_, capsize=0.5 * ms)
 
             ax.annotate(pname, [x + x_mod, yerr_u + y_mod], zorder=50,
-                        fontsize=1.25 * fontsize, rotation=rotation, color=color_)
+                        fontsize=1.25 * fontsize, rotation=rotation,
+                        color=color_, fontweight=fontweight, bbox=bbox)
         else:
             ax.errorbar(x=x, y=y,
                         xerr=[[xerr_l], [xerr_u]], yerr=[[yerr_l], [yerr_u]],
@@ -69,7 +79,8 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
                         alpha=alpha_)
 
             ax.annotate(pname, [x + x_mod, y + yerr_u + y_mod], zorder=50,
-                        fontsize=1.25 * fontsize, rotation=rotation, color=color_)
+                        fontsize=1.25 * fontsize, rotation=rotation,
+                        color=color_, bbox=bbox)
 
     for pname, val in planet_bayes_test.items():
         ax.scatter(val['Tp'], val['ColdTrap']['AlbedoRaw'],
@@ -77,15 +88,15 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
         ax.scatter(val['Tp'], val['MgSiO3']['AlbedoRaw'],
                    s=s, alpha=alpha, color=colors[1])
 
-    logg_s = array([val['logg'] for key, val in planet_data.items()])
+    logg_s = np.array([val['logg'] for key, val in planet_data.items()])
 
     if len(planet_data.items()):
         logg_s = (logg_s - logg_s.min()) / (logg_s.max() - logg_s.min())
 
     for (pname, val), logg in zip(planet_data.items(), logg_s):
-        albedo_coldtrap = random.normal(val['coldtrap'],
-                                        wiggle * val['geo_alb_unc'])
-        albedo_mgsio3 = random.normal(
+        albedo_coldtrap = np.random.normal(val['coldtrap'],
+                                           wiggle * val['geo_alb_unc'])
+        albedo_mgsio3 = np.random.normal(
             val['mgsio3'], wiggle * val['geo_alb_unc'])
         ax.errorbar(val['Tp'] - squidge, albedo_coldtrap, val['geo_alb_unc'],
                     50, fmt='o', ms=ms * (1 + logg), lw=lw1, color=colors[0],
@@ -139,7 +150,7 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
             ax.errorbar([], [], [], color=color_, lw=lw1, ms=ms * 3,
                         label=label)
 
-    leg_kwargs = {'loc': 2,
+    leg_kwargs = {'loc': 0,
                   'fontsize': fontsize,
                   'ncol': 1,
                   # 'bbox_to_anchor': (1.025, 1.075)
@@ -151,6 +162,32 @@ def plot_geometric_albedos_vs_models(models, planet_bayes_test, planet_data,
     leg = ax.legend(**leg_kwargs)
 
     leg.set_zorder(200)
+
+    if include_arrow:
+        query_ = 'Planet_Name == "WASP-43 b"'
+        idx_wasp43 = np.int32(pub_data.query(query_).index)[0]
+        color_ = pub_data.iloc[idx_wasp43].color
+
+        xstart = 1250
+        ystart = 0.3
+        dx = 115
+        dy = -0.105
+        width = 0.003
+        head_width = 0.01
+        head_length = 10
+        zorder = 1000
+        length_includes_head = True
+        shape = 'full'
+
+        ax.arrow(xstart, ystart, dx, dy,
+                 length_includes_head=length_includes_head,
+                 color=color_,
+                 width=width,
+                 shape=shape,
+                 head_width=head_width,
+                 head_length=head_length,
+                 zorder=zorder)
+
     if save_name is not None:
         print('[INFO] Saving image to {}'.format(save_name))
         plt.savefig(save_name)
@@ -222,12 +259,12 @@ plt.rcParams['ytick.minor.visible'] = False
 plt.rcParams['xtick.bottom'] = True
 plt.rcParams['ytick.left'] = True
 
-colorcycle = array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+colorcycle = np.array(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 
-mgsio3_curve = read_csv('MgSiO3_albedo_vs_temperature.csv',
-                        names=['T_eq', 'Albedo'])
-coldtrap_curve = read_csv('ColdTrap_albedo_vs_temperature.csv',
-                          names=['T_eq', 'Albedo'])
+mgsio3_curve = pd.read_csv('MgSiO3_albedo_vs_temperature.csv',
+                           names=['T_eq', 'Albedo'])
+coldtrap_curve = pd.read_csv('ColdTrap_albedo_vs_temperature.csv',
+                             names=['T_eq', 'Albedo'])
 
 cspline_mgsio3 = CubicSpline(mgsio3_curve['T_eq'], mgsio3_curve['Albedo'])
 cspline_coldtrap = CubicSpline(
@@ -235,8 +272,8 @@ cspline_coldtrap = CubicSpline(
 
 coldtrap_curve_new = cspline_coldtrap(mgsio3_curve['T_eq'].values)
 
-inputs = transpose([mgsio3_curve['T_eq'].values, coldtrap_curve_new])
-coldtrap_curve = DataFrame(inputs, columns=list(mgsio3_curve.columns))
+inputs = np.transpose([mgsio3_curve['T_eq'].values, coldtrap_curve_new])
+coldtrap_curve = pd.DataFrame(inputs, columns=list(mgsio3_curve.columns))
 
 joblib_load_name = 'geometric_albedo_input_data_{}.joblib.save'
 
@@ -259,22 +296,23 @@ planet_data['HD 209458b']['coldtrap'] = None
 planet_data['HD 209458b']['geo_alb_unc'] = None
 
 
-black_dots = read_csv('esteves_table_of_geometric_albedos.csv', delimiter='\t')
+black_dots = pd.read_csv(
+    'esteves_table_of_geometric_albedos.csv', delimiter='\t')
 black_dots['color'] = ['black'] * len(black_dots)
 black_dots['alpha'] = [1.0] * len(black_dots)
 black_dots['upperlimit'] = [False] * len(black_dots)
 
 n = 9
-color = plt.cm.plasma(linspace(0.1, 0.75, n))
-color = int32(color[:, 0:-1] * 255)
+color = plt.cm.plasma(np.linspace(0.1, 0.75, n))
+color = np.int32(color[:, 0:-1] * 255)
 hexcolor = ['#%02x%02x%02x' % (rgb[0], rgb[1], rgb[2]) for rgb in color]
 
 
-hd189stis = read_csv('hd189733b_stis_eclipse_spectrum.csv')
+hd189stis = pd.read_csv('hd189733b_stis_eclipse_spectrum.csv')
 hd189stis['uncAg'] = hd189stis[['Ag-', 'Ag+']].mean(axis=1)
 hd189point = (hd189stis['Ag'] / hd189stis['uncAg']).sum()
 hd189point = hd189point / (1 / hd189stis['uncAg']).sum()
-hd189_unc = hd189stis['uncAg'].mean() / sqrt(len(hd189stis['uncAg']))
+hd189_unc = hd189stis['uncAg'].mean() / np.sqrt(len(hd189stis['uncAg']))
 
 # hd189point = 0.15867990829405226
 
@@ -427,16 +465,17 @@ for colname in black_dots.columns:
         black_dots[colname.replace(',', '_')] = black_dots[colname]
         del black_dots[colname]
 
-idx_hd209 = int32(black_dots.query('Planet_Name == "HD 209458 b"').index)[0]
-idx_qatar2 = int32(black_dots.query('Planet_Name == "Qatar-2 b"').index)[0]
-idx_wasp104 = int32(black_dots.query('Planet_Name == "WASP-104 b"').index)[0]
-idx_k2141 = int32(black_dots.query('Planet_Name == "K2-141 b"').index)[0]
-idx_hd189 = int32(black_dots.query('Planet_Name == "HD 189733 b"').index)[0]
-idx_corot2 = int32(black_dots.query('Planet_Name == "Corot-2 b"').index)[0]
-idx_tres2 = int32(black_dots.query('Planet_Name == "TrES-2 b"').index)[0]
-idx_wasp43 = int32(black_dots.query('Planet_Name == "WASP-43 b"').index)[0]
-idx_wasp12 = int32(black_dots.query('Planet_Name == "WASP-12 b"').index)[0]
-idx_koi13bb = int32(black_dots.query('Planet_Name == "KOI-13 bb"').index)[0]
+idx_hd209 = np.int32(black_dots.query('Planet_Name == "HD 209458 b"').index)[0]
+idx_qatar2 = np.int32(black_dots.query('Planet_Name == "Qatar-2 b"').index)[0]
+idx_wasp104 = np.int32(black_dots.query(
+    'Planet_Name == "WASP-104 b"').index)[0]
+idx_k2141 = np.int32(black_dots.query('Planet_Name == "K2-141 b"').index)[0]
+idx_hd189 = np.int32(black_dots.query('Planet_Name == "HD 189733 b"').index)[0]
+idx_corot2 = np.int32(black_dots.query('Planet_Name == "Corot-2 b"').index)[0]
+idx_tres2 = np.int32(black_dots.query('Planet_Name == "TrES-2 b"').index)[0]
+idx_wasp43 = np.int32(black_dots.query('Planet_Name == "WASP-43 b"').index)[0]
+idx_wasp12 = np.int32(black_dots.query('Planet_Name == "WASP-12 b"').index)[0]
+idx_koi13bb = np.int32(black_dots.query('Planet_Name == "KOI-13 bb"').index)[0]
 
 black_dots.loc[idx_tres2, 'color'] = hexcolor[-6]
 black_dots.loc[idx_koi13bb, 'Planet_Name'] = 'KOI-13 b'
@@ -456,14 +495,14 @@ black_dots.loc[idx_wasp43, 'Instrument'] = '(UVIS:584nm; This Work)'
 wiggle = 0.2
 squidge = 1
 ylims = [-0.01, 0.55]
-xlims = [1100, 2050]
+xlims = [1100, 2050]  # 2650 to inlucde WASP12
 text_height = 0.799
 colors = colorcycle[[0, 1]]
 show_now = True
 ms = 10
 
-hd189733 = array([.4, 0, .45, .39, .32, .17, -.11, .02])
-hd189733_u = array([.12, .12, .55, .27, .15, .12, .14, .14])
+hd189733 = np.array([.4, 0, .45, .39, .32, .17, -.11, .02])
+hd189733_u = np.array([.12, .12, .55, .27, .15, .12, .14, .14])
 
 deltaLoggs = {'WASP-52b': 0.02,
               # 'Qatar-2b':5,
@@ -479,8 +518,8 @@ deltaLoggs = {'WASP-52b': 0.02,
 ntargs = len(deltaLoggs)
 
 print('[INFO] Commensing Logg vs T_eq Plot Without Point')
-yticks = arange(2.9, 4.0, 0.1)
-xticks = arange(1300, 1800, 100)
+yticks = np.arange(2.9, 4.0, 0.1)
+xticks = np.arange(1300, 1800, 100)
 
 """
 save_name = 'gravity_vs_T_eq_for_{}_targets.png'.format(ntargs)
@@ -495,9 +534,9 @@ Temp2 = 1800
 idx1 = abs(models[0]['T_eq'] - Temp1).idxmin()
 idx2 = abs(models[0]['T_eq'] - Temp2).idxmin()
 
-idx_use = arange(0, idx1, 50)
-idx_use = append(idx_use, arange(idx1, idx2, 20))
-idx_use = append(idx_use, arange(idx2, len(models[0]), 50))
+idx_use = np.arange(0, idx1, 50)
+idx_use = np.append(idx_use, np.arange(idx1, idx2, 20))
+idx_use = np.append(idx_use, np.arange(idx2, len(models[0]), 50))
 
 """ Plot without the point cloud"""
 save_name = 'geometric_albedo_with_errorbars_for_{}_targets_with{}_points.png'
