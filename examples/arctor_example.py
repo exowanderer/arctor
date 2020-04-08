@@ -24,11 +24,11 @@ if __name__ == '__main__':
     # if clargs.planet_name is None:
     #     planet_name = 'WASP43'
     # else:
-    planet_name = 'HD80606b'  # because I am unimaginative
+    planet_name = clargs.planet_name
+    planet_name = 'HD80606'  # because I am unimaginative
     assert(planet_name is not None), \
         "Must provide planet name as --planet_name or -pn"
 
-    planet_name = clargs.planet_name
     file_type = clargs.file_type
 
     # HOME = os.environ['HOME']
@@ -36,6 +36,20 @@ if __name__ == '__main__':
     data_dir = os.path.join(base_dir, 'data', 'UVIS', 'HST', 'FLTs')
     working_dir = os.path.join(base_dir, 'github_analysis')
     save_dir = os.path.join(base_dir, 'savefiles')
+
+    assert(os.path.exists(base_dir)), (
+        '[WARNING] Please either edit the `base_dir` '
+        'or configure the directory structure as above')
+    assert(os.path.exists(data_dir)), (
+        '[WARNING] Please either edit the `data_dir` '
+        'or configure the directory structure as above')
+
+    if not os.path.exists(working_dir):
+        info_message(f'Creating {working_dir}')
+        os.mkdir(working_dir)
+    if not os.path.exists(save_dir):
+        info_message(f'Creating {save_dir}')
+        os.mkdir(save_dir)
 
     planet = instantiate_arctor(planet_name, data_dir, working_dir, file_type)
 

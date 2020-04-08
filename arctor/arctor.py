@@ -648,6 +648,18 @@ class Arctor(object):
     """
 
     def identify_trace_direction(self):
+        def verify_postargs(postargs, num_postargs=2):
+            uniq_postargs = np.unique(postargs)
+
+            while len(uniq_postargs) > num_postargs:
+                counts = [np.sum(upt == postargs) for upt in uniq_postargs]
+                argmin = np.argmin(counts)
+                left = uniq_postargs[:argmin]
+                right = uniq_postargs[argmin + 1:]
+                uniq_postargs = np.r_[left, right]
+
+            return uniq_postargs
+
         info_message(f'Identifying Trace Direction per Image')
         postargs1 = np.zeros(len(self.fits_dict))
         postargs2 = np.zeros(len(self.fits_dict))
@@ -655,8 +667,8 @@ class Arctor(object):
             postargs1[k] = val['PRIMARY'].header['POSTARG1']
             postargs2[k] = val['PRIMARY'].header['POSTARG2']
 
-        postargs1_rev, postargs1_fwd = np.unique(postargs1)
-        postargs2_rev, postargs2_fwd = np.unique(postargs2)
+        postargs1_rev, postargs1_fwd = verify_postargs(postargs1)
+        postargs2_rev, postargs2_fwd = verify_postargs(postargs2)
 
         self.idx_fwd = np.where(np.bitwise_and(postargs1 == postargs1_fwd,
                                                postargs2 == postargs2_fwd))[0]

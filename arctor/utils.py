@@ -1,5 +1,6 @@
 from . import *
 from .arctor import *
+from .arctor import Arctor
 
 import astropy.units as units
 import exoplanet as xo
@@ -819,8 +820,8 @@ def instantiate_star_planet_system(  # Stellar parameters
     return starry.System(A, b)
 
 
-def instantiate_arctor(planet_name, data_dir, working_dir, file_type,
-                       save_name_base='savedict'):
+def previous_instantiate_arctor(planet_name, data_dir, working_dir, file_type,
+                                save_name_base='savedict'):
     planet = Arctor(
         planet_name=planet_name,
         data_dir=data_dir,
