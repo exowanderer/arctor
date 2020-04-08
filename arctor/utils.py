@@ -25,6 +25,40 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
+def instantiate_arctor(planet_name, data_dir, working_dir, file_type):
+    planet = Arctor(
+        planet_name=planet_name,
+        data_dir=data_dir,
+        working_dir=working_dir,
+        file_type=file_type)
+
+    joblib_filename = f'{planet_name}_savedict.joblib.save'
+    joblib_filename = f'{working_dir}/{joblib_filename}'
+    if os.path.exists(joblib_filename):
+        info_message('Loading Data from Save File')
+        planet.load_data(joblib_filename)
+    else:
+        info_message('Loading New Data Object')
+        planet.load_data()
+
+    return planet
+
+
+def create_raw_lc_stddev(planet):
+    ppm = 1e6
+    phot_vals = planet.photometry_df
+    lc_std_rev = phot_vals.iloc[planet.idx_rev].std(axis=0)
+    lc_std_fwd = phot_vals.iloc[planet.idx_fwd].std(axis=0)
+
+    lc_med_rev = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
+    lc_med_fwd = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
+
+    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
+    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
+
+    return lc_std / lc_med * ppm
+
+
 def get_flux_idx_from_df(planet, aper_width, aper_height):
     # There *must* be a faster way!
     aperwidth_columns = [colname

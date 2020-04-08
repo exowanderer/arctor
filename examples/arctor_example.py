@@ -2,42 +2,8 @@ import joblib
 import numpy as np
 import os
 
-from arctor import Arctor
+from arctor import Arctor, instantiate_arctor, create_raw_lc_stddev
 from arctor import debug_message, warning_message, info_message
-
-
-def instantiate_arctor(planet_name, data_dir, working_dir, file_type):
-    planet = Arctor(
-        planet_name=planet_name,
-        data_dir=data_dir,
-        working_dir=working_dir,
-        file_type=file_type)
-
-    joblib_filename = f'{planet_name}_savedict.joblib.save'
-    joblib_filename = f'{working_dir}/{joblib_filename}'
-    if os.path.exists(joblib_filename):
-        info_message('Loading Data from Save File')
-        planet.load_data(joblib_filename)
-    else:
-        info_message('Loading New Data Object')
-        planet.load_data()
-
-    return planet
-
-
-def create_raw_lc_stddev(planet):
-    ppm = 1e6
-    phot_vals = planet.photometry_df
-    lc_std_rev = phot_vals.iloc[planet.idx_rev].std(axis=0)
-    lc_std_fwd = phot_vals.iloc[planet.idx_fwd].std(axis=0)
-
-    lc_med_rev = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
-    lc_med_fwd = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
-
-    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
-    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
-
-    return lc_std / lc_med * ppm
 
 if __name__ == '__main__':
     from argparse import ArgumentParser
@@ -52,14 +18,20 @@ if __name__ == '__main__':
 
     clargs = parser.parse_args()
 
-    clargs.plot_verbose = True
-    clargs.save_now = True
-    planet_name = 'WASP43' \
-        if clargs.planet_name is None else clargs.planet_name
+    # clargs.plot_verbose = True
+    # clargs.save_now = True
+
+    # if clargs.planet_name is None:
+    #     planet_name = 'WASP43'
+    # else:
+    planet_name = 'HD80606b'  # because I am unimaginative
+    assert(planet_name is not None), \
+        "Must provide planet name as --planet_name or -pn"
+
+    planet_name = clargs.planet_name
     file_type = clargs.file_type
 
     # HOME = os.environ['HOME']
-    planet_name = 'WASP43'
     base_dir = os.path.join('/', 'bigData', 'Research', 'Planets', planet_name)
     data_dir = os.path.join(base_dir, 'data', 'UVIS', 'HST', 'FLTs')
     working_dir = os.path.join(base_dir, 'github_analysis')
