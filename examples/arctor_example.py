@@ -58,11 +58,12 @@ if __name__ == '__main__':
         if clargs.planet_name is None else clargs.planet_name
     file_type = clargs.file_type
 
-    HOME = os.environ['HOME']
-    base_dir = os.path.join(HOME, 'Research', 'Planets', 'WASP43')
-    data_dir = os.path.join(base_dir, 'data', 'UVIS', 'MAST_2019-07-03T0738')
-    data_dir = os.path.join(data_dir, 'HST', 'FLTs')
-    working_dir = os.path.join(base_dir, 'github_analysis', 'savefiles')
+    # HOME = os.environ['HOME']
+    planet_name = 'WASP43'
+    base_dir = os.path.join('/', 'bigData', 'Research', 'Planets', planet_name)
+    data_dir = os.path.join(base_dir, 'data', 'UVIS', 'HST', 'FLTs')
+    working_dir = os.path.join(base_dir, 'github_analysis')
+    save_dir = os.path.join(base_dir, 'savefiles')
 
     planet = instantiate_arctor(planet_name, data_dir, working_dir, file_type)
 
