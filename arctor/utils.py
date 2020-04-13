@@ -1,8 +1,7 @@
 from . import *
 from .arctor import *
-from .arctor import Arctor
+# from . import Arctor
 
-import astropy.units as units
 import exoplanet as xo
 import numpy as np
 import os
@@ -12,6 +11,12 @@ import starry
 import theano.tensor as tt
 
 from statsmodels.robust.scale import mad
+
+from astropy.io import fits
+from astropy.time import Time
+from astropy import units
+
+from tqdm import tqdm
 
 
 def debug_message(message, end='\n'):
@@ -24,25 +29,6 @@ def warning_message(message, end='\n'):
 
 def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
-
-
-def instantiate_arctor(planet_name, data_dir, working_dir, file_type):
-    planet = Arctor(
-        planet_name=planet_name,
-        data_dir=data_dir,
-        working_dir=working_dir,
-        file_type=file_type)
-
-    joblib_filename = f'{planet_name}_savedict.joblib.save'
-    joblib_filename = f'{working_dir}/{joblib_filename}'
-    if os.path.exists(joblib_filename):
-        info_message('Loading Data from Save File')
-        planet.load_data(joblib_filename)
-    else:
-        info_message('Loading New Data Object')
-        planet.load_data()
-
-    return planet
 
 
 def create_raw_lc_stddev(planet):
@@ -60,32 +46,31 @@ def create_raw_lc_stddev(planet):
     return lc_std / lc_med * ppm
 
 
-def get_flux_idx_from_df(planet, aper_width, aper_height):
-    # There *must* be a faster way!
-    aperwidth_columns = [colname
-                         for colname in planet.photometry_df.columns
-                         if 'aper_width' in colname]
+# def get_flux_idx_from_df(planet, aper_width, aper_height):
+#     # There *must* be a faster way!
+#     aperwidth_columns = [colname
+#                          for colname in planet.photometry_df.columns
+#                          if 'aper_width' in colname]
 
-    aperheight_columns = [colname
-                          for colname in planet.photometry_df.columns
-                          if 'aper_height' in colname]
+#     aperheight_columns = [colname
+#                           for colname in planet.photometry_df.columns
+#                           if 'aper_height' in colname]
 
-    trace_length = np.median(planet.trace_lengths) - 0.1
+#     trace_length = np.median(planet.trace_lengths) - 0.1
 
-    aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
-    aperwidths_df = aperwidths_df.astype(int)
+#     aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
+#     aperwidths_df = aperwidths_df.astype(int)
 
-    aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
-    aperwidth_flag = aperwidths_df.values[0] == aper_width
-    aperheight_flag = aperheight_df.values[0] == aper_height
+#     aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
+#     aperwidth_flag = aperwidths_df.values[0] == aper_width
+#     aperheight_flag = aperheight_df.values[0] == aper_height
 
-    return np.where(aperwidth_flag * aperheight_flag)  # [0][0]
+#     return np.where(aperwidth_flag * aperheight_flag)  # [0][0]
 
 
 def print_flux_stddev(planet, aper_width, aper_height):
     # There *must* be a faster way!
-    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
-    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+    fluxes = planet.photometry_df[f'aperture_sum_{aper_width}x{aper_height}']
     fluxes = fluxes / np.median(fluxes)
 
     info_message(f'{aper_width}x{aper_height}: {np.std(fluxes)*1e6:0.0f} ppm')
@@ -95,8 +80,8 @@ def find_flux_stddev(planet, flux_std, aper_widths, aper_heights):
     # There *must* be a faster way!
     for aper_width in tqdm(aper_widths):
         for aper_height in tqdm(aper_heights):
-            flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
-            fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+            flux_key = f'aperture_sum_{aper_width}x{aper_height}'
+            fluxes = planet.photometry_df[flux_key]
             fluxes = fluxes / np.median(fluxes)
 
             if np.std(fluxes) * 1e6 < flux_std:
@@ -751,6 +736,28 @@ def compute_xo_lightcurve(planet_name, times, depth_ppm=1000, u=[0]):
         orbit=orbit, r=edepth, t=times).eval().flatten()
 
 
+def instantiate_arctor(planet_name, data_dir, working_dir, file_type,
+                       joblib_filename='', sort_by_time=False):
+    assert(False), ("This needs to be places in the examples. "
+                    "For some reason, `from .arctor import Arctor` "
+                    "does not work as it is expected to work.")
+
+    planet = Arctor(
+        planet_name=planet_name,
+        data_dir=data_dir,
+        working_dir=working_dir,
+        file_type=file_type)
+
+    if os.path.exists(joblib_filename):
+        info_message('Loading Data from Save File')
+        planet.load_dict(joblib_filename)
+    else:
+        info_message('Loading New Data Object')
+        planet.load_data(sort_by_time=sort_by_time)
+
+    return planet
+
+
 def instantiate_star_planet_system(  # Stellar parameters
         star_ydeg=0, star_udeg=2, star_L=1.0, star_inc=90.0,
         star_obl=0.0, star_m=1.0, star_r=1.0, star_prot=1.0,
@@ -1337,6 +1344,21 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
             fine_grain_mcmcs_with_w_xcenter_log_edepth_no_split,
             fine_grain_mcmcs_with_w_xcenter_log_edepth_w_split
             ]
+
+
+def rename_file(filename, data_dir='./', base_time=2400000.5,
+                format='jd', scale='utc'):
+
+    path_in = os.path.join(data_dir, filename)
+    header = fits.getheader(path_in, ext=0)
+    time_stamp = 0.5 * (header['EXPSTART'] + header['EXPEND'])
+    time_obj = astropy.time.Time(val=time_stamp, val2=base_time,
+                                 format=format, scale=scale)
+
+    out_filename = f'{time_obj.isot}_{filename}'
+    path_out = os.path.join(data_dir, out_filename)
+
+    os.rename(path_in, path_out)
 
 
 def compute_delta_sdnr(map_soln, phots, idx_fwd, idx_rev):
