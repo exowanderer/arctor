@@ -435,15 +435,8 @@ class Arctor(object):
 
     def do_multi_phot(self, aper_widths, aper_heights,
                       subpixels=32, positions=None, thetas=None):
+
         info_message('Beginning Multi-Aperture Photometry')
-        # info_message(
-        #     'Parameters:\n'
-        #     f'AperWidths:{np.min(aper_widths)}-{np.max(aper_widths)}\n'
-        #     f'AperHeights:{np.min(aper_heights)}-{np.max(aper_heights)}\n'
-        #     f'SubPixels:{subpixels}\n'
-        #     f'Positions:{np.median(positions)}\n'
-        #     f'Thetas:{np.median(thetas)}'
-        # )
 
         if positions is None:
             xcenters_ = self.trace_xcenters
@@ -454,17 +447,7 @@ class Arctor(object):
             thetas = self.trace_angles
 
         aper_widths = self.trace_length + aper_widths
-        '''
-        if not hasattr(self, 'fluxes'):
-            self.fluxes = {}
-            self.fluxes['apertures'] = {}
-            self.fluxes['positions'] = {}
-            self.fluxes['aper_width'] = {}
-            self.fluxes['aper_height'] = {}
-            self.fluxes['thetas'] = {}
-            self.fluxes['fluxes'] = {}
-            self.fluxes['errors'] = {}
-        '''
+
         info_message('Creating Apertures')
         n_apertures = 0
         apertures_stack = []
@@ -488,9 +471,9 @@ class Arctor(object):
         zipper_ = zip(image_minus_sky_, apertures_stack)
 
         operation = 'Aperture Photometry per Image'
-        # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper_)]
-        start = time()
+
         info_message(f'Computing {operation}')
+        start = time()
         pool = mp.Pool(mp.cpu_count() - 1)
         aper_phots = pool.starmap(partial_aper_phot, zipper_)
         pool.close()
@@ -515,6 +498,11 @@ class Arctor(object):
         photometry_df = aper_table_2_df(
             aper_phots, np.int32(aper_widths - self.trace_length),
             np.int32(aper_heights), self.n_images)
+
+        if 'ycenter' in photometry_df.columns:
+            photometry_df.drop(['ycenter'], axis=1, inplace=True)
+        if 'xcenter' in photometry_df.columns:
+            photometry_df.drop(['ycenter'], axis=1, inplace=True)
 
         # Store new dataframe to object dataframe
         if not hasattr(self, 'photometry_df'):

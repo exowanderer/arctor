@@ -117,15 +117,23 @@ if __name__ == '__main__':
     else:
         print('[INFO] Skipping `do_multi_phot` until you are ready')
 
-    aper_width = 51
-    aper_height = 51
+    aper_width = 176  # lowest SDNR
+    aper_height = 116  # lowest SDNR
+    ax = None
     ax = plot_lightcurve(planet, aper_width, aper_height,
-                         t0_base=planet.times.min(), ax=ax,
-                         include_orbits=True,
-                         highlight_outliers=True)
+                         t0_base=planet.times.min(),
+                         ax=ax,
+                         include_orbits=False,
+                         highlight_outliers=True,
+                         include_uncertainties=True,
+                         use_stat_ylim=True,
+                         size=100,
+                         n_sig=2)
 
-    plot_2D_stddev(planet, signal_max=235)  # , aper_widths, aper_heights
-    plot_center_position_vs_scan_and_orbit(planet)
+    axs = None
+    axs = plot_2D_stddev(planet, signal_max=350, axs=axs)
+
+    ax = plot_center_position_vs_scan_and_orbit(planet, ax=ax)
 
     snr_lightcurves = create_raw_lc_stddev(planet)
     min_snr_colname = planet.photometry_df.columns[snr_lightcurves.argmin()]
@@ -167,12 +175,13 @@ if __name__ == '__main__':
         # planet.save_text_file(csv_filename)
         planet.save_dict(joblib_filename)
 
-    aper_width = 136  # FINDME: Check these
-    aper_height = 111  # FINDME: Check these
+    aper_width = 176  # FINDME: Check these
+    aper_height = 116  # FINDME: Check these
     ax = plot_lightcurve(planet, aper_width, aper_height,
                          t0_base=planet.times.min(), ax=ax,
                          include_orbits=True,
-                         highlight_outliers=True)    plot_ycenter_vs_flux(planet, aper_width, aper_height)
+                         highlight_outliers=True)
+    plot_ycenter_vs_flux(planet, aper_width, aper_height)
 
     plot_xcenter_vs_flux(planet, aper_width, aper_height, ax=ax,
                          include_orbits=True,
@@ -194,8 +203,8 @@ if __name__ == '__main__':
                    aper_widths,
                    aper_heights,
                    signal_max=230)
-ax1, ax2 = None, None
-ax1 = plot_trace_over_time(
-    planet, ax=ax1, adjust_xloc=False, metric=np.std, delta_y=10)
-ax2 = plot_trace_over_time(
-    planet, ax=ax2, adjust_xloc=True, metric=np.std, delta_y=10)
+    ax1, ax2 = None, None
+    ax1 = plot_trace_over_time(
+        planet, ax=ax1, adjust_xloc=False, metric=np.std, delta_y=10)
+    ax2 = plot_trace_over_time(
+        planet, ax=ax2, adjust_xloc=True, metric=np.std, delta_y=10)

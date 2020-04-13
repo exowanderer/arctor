@@ -13,6 +13,7 @@ import theano.tensor as tt
 from statsmodels.robust.scale import mad
 
 from astropy.io import fits
+from astropy.stats import mad_std, sigma_clip
 from astropy.time import Time
 from astropy import units
 
@@ -847,17 +848,40 @@ def previous_instantiate_arctor(planet_name, data_dir, working_dir, file_type,
     return planet
 
 
-def create_raw_lc_stddev(planet):
+def create_raw_lc_stddev(planet, reject_outliers=True):
     ppm = 1e6
     phot_vals = planet.photometry_df
-    lc_std_rev = phot_vals.iloc[planet.idx_rev].std(axis=0)
-    lc_std_fwd = phot_vals.iloc[planet.idx_fwd].std(axis=0)
+    n_columns = len(planet.photometry_df.columns)
 
-    lc_med_rev = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
-    lc_med_fwd = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
+    # lc_med_fwd = np.zeros_like(n_columns)
+    # lc_med_rev = np.zeros_like(n_columns)
 
-    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
-    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
+    # lc_std_fwd = np.zeros_like(n_columns)
+    # lc_std_rev = np.zeros_like(n_columns)
+
+    lc_med = np.zeros(n_columns)
+    lc_std = np.zeros(n_columns)
+
+    for k, colname in enumerate(phot_vals.columns):
+        if reject_outliers:
+            inliers_fwd, inliers_rev = compute_inliers(
+                planet, aper_colname=colname, n_sig=2
+            )
+        else:
+            inliers_fwd = np.arange(planet.idx_fwd.size)
+            inliers_rev = np.arange(planet.idx_rev.size)
+
+        phots_rev = phot_vals[colname].iloc[planet.idx_rev].iloc[inliers_rev]
+        phots_fwd = phot_vals[colname].iloc[planet.idx_fwd].iloc[inliers_fwd]
+
+        lc_std_rev = mad_std(phots_rev)
+        lc_std_fwd = mad_std(phots_fwd)
+
+        lc_med_rev = np.median(phots_fwd)
+        lc_med_fwd = np.median(phots_fwd)
+
+        lc_std[k] = np.mean([lc_std_rev, lc_std_fwd])
+        lc_med[k] = np.mean([lc_med_rev, lc_med_fwd])
 
     return lc_std / lc_med * ppm
 
@@ -1424,6 +1448,43 @@ def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
     bic_ = chisq_ + n_params * np.log10(n_pts)
 
     return chisq_, aic_, bic_, sdnr_
+
+
+def compute_inliers(instance, aper_colname='aperture_sum_176x116', n_sig=2):
+
+    phots_ = instance.normed_photometry_df[aper_colname]
+
+    inliers_fwd = ~sigma_clip(phots_[instance.idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    inliers_rev = ~sigma_clip(phots_[instance.idx_rev],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    inliers_fwd = np.where(inliers_fwd)[0]
+    inliers_rev = np.where(inliers_rev)[0]
+
+    return inliers_fwd, inliers_rev
+
+
+def compute_outliers(instance, aper_colname='aperture_sum_176x116', n_sig=2):
+    phots_ = instance.normed_photometry_df[aper_colname]
+    outliers_fwd = sigma_clip(phots_[instance.idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+    outliers_rev = sigma_clip(phots_[instance.idx_rev],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    outliers_fwd = np.where(outliers_fwd)[0]
+    outliers_rev = np.where(outliers_rev)[0]
+
+    return outliers_fwd, outliers_rev
 
 
 def extract_map_only_data(planet, idx_fwd, idx_rev,

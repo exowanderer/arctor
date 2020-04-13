@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from arctor.utils import find_flux_stddev, print_flux_stddev
-from arctor.utils import create_sub_sect
+from arctor.utils import create_sub_sect, compute_inliers
 from arctor.utils import get_map_results_models
 from astropy.stats import sigma_clip, mad_std
 
@@ -540,43 +540,6 @@ def uniform_scatter_plot(instance, xarr, yarr, include_orbits=False,
     ax.legend(loc=0, fontsize=leg_fontsize)
 
     return ax
-
-
-def compute_inliers(instance, aper_colname_='aperture_sum_136x111', n_sig=2):
-
-    phots_ = instance.normed_photometry_df[aper_colname_]
-
-    inliers_fwd = ~sigma_clip(phots_[instance.idx_fwd],
-                              sigma=n_sig,
-                              maxiters=1,
-                              stdfunc=mad_std).mask
-
-    inliers_rev = ~sigma_clip(phots_[instance.idx_rev],
-                              sigma=n_sig,
-                              maxiters=1,
-                              stdfunc=mad_std).mask
-
-    inliers_fwd = np.where(inliers_fwd)[0]
-    inliers_rev = np.where(inliers_rev)[0]
-
-    return inliers_fwd, inliers_rev
-
-
-def compute_outliers(instance, aper_colname_='aperture_sum_136x111', n_sig=2):
-    phots_ = instance.normed_photometry_df[aper_colname_]
-    outliers_fwd = sigma_clip(phots_[instance.idx_fwd],
-                              sigma=n_sig,
-                              maxiters=1,
-                              stdfunc=mad_std).mask
-    outliers_rev = sigma_clip(phots_[instance.idx_rev],
-                              sigma=n_sig,
-                              maxiters=1,
-                              stdfunc=mad_std).mask
-
-    outliers_fwd = np.where(outliers_fwd)[0]
-    outliers_rev = np.where(outliers_rev)[0]
-
-    return outliers_fwd, outliers_rev
 
 
 def circle_outliers(xarr, yarr, idx_fwd=None, idx_rev=None,
@@ -1782,8 +1745,6 @@ def plot_lightcurve(instance, aper_width, aper_height,
         std_flux = np.mean([std_fwd_, std_rev_])
         min_flux = med_flux - (n_sig + 1) * std_flux
         max_flux = med_flux + (n_sig + 1) * std_flux
-        ppm = 1e6
-        debug_message(f'{(med_flux-1)*ppm} +/- {std_flux*ppm}')
     else:
         min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
 
