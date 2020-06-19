@@ -142,6 +142,8 @@ def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
                              res_diff_ppm, width=1e-3,
                              fontsize=40, leg_fontsize=30., ax=None):
 
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
+
     if ax is None:
         fig, ax = plt.subplots()
 
