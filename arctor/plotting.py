@@ -2146,8 +2146,8 @@ def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
     return photometry_df
 
 
-def compute_light_curve_rms(phots, idx_fwd, idx_rev,
-                            n_sig=3, return_ratio=False):
+def compute_light_curve_rms(phots, idx_fwd, idx_rev, n_sig=3,
+                            difference=False, return_ratio=False):
     ppm = 1e6
     inliers_fwd = ~sigma_clip(phots[idx_fwd],
                               sigma=n_sig,
@@ -2157,9 +2157,12 @@ def compute_light_curve_rms(phots, idx_fwd, idx_rev,
                               sigma=n_sig,
                               maxiters=1,
                               stdfunc=mad_std).mask
-    phots_rev = phots[idx_rev][inliers_rev]
-    phots_fwd = phots[idx_fwd][inliers_fwd]
+    phots_fwd = phots[idx_fwd][inliers_fwd].copy()
+    phots_rev = phots[idx_rev][inliers_rev].copy()
 
+    if difference:
+        phots_fwd = np.diff(phots_fwd)
+        phots_rev = np.diff(phots_rev)
     lc_std_rev = phots_rev.std()
     lc_std_fwd = phots_fwd.std()
 
@@ -2176,7 +2179,8 @@ def compute_light_curve_rms(phots, idx_fwd, idx_rev,
 
 
 def plot_2D_stddev(instance, signal_max=500, fontsize=20,
-                   n_sig=3, reject_outliers=True, axs=None):
+                   n_sig=3, reject_outliers=True, difference=False,
+                   axs=None):
 
     if axs is None:
         fig, ax = plt.subplots()
@@ -2222,7 +2226,8 @@ def plot_2D_stddev(instance, signal_max=500, fontsize=20,
         lc_std_, lc_med_ = compute_light_curve_rms(phots=phot_vals[colname],
                                                    idx_fwd=instance.idx_fwd,
                                                    idx_rev=instance.idx_rev,
-                                                   n_sig=n_sig)
+                                                   n_sig=n_sig,
+                                                   difference=difference)
         lc_std[k] = lc_std_
         lc_med[k] = lc_med_
 
@@ -2260,15 +2265,15 @@ def plot_2D_stddev(instance, signal_max=500, fontsize=20,
 
     ax.plot(width_best, height_best, 'o', color='C1', ms=10)
     ax.annotate(f'{best_ppm:.0f} ppm [{width_best}x{height_best}]',
-                 (width_best + 1, height_best + 1),
-                 # xycoords='axes fraction',
-                 xytext=(width_best + 1, height_best + 1),
-                 # textcoords='offset points',
-                 ha='left',
-                 va='bottom',
-                 fontsize=fontsize // 2,
-                 color='C1',
-                 weight='bold')
+                (width_best + 1, height_best + 1),
+                # xycoords='axes fraction',
+                xytext=(width_best + 1, height_best + 1),
+                # textcoords='offset points',
+                ha='left',
+                va='bottom',
+                fontsize=fontsize // 2,
+                color='C1',
+                weight='bold')
 
     ax.set_xlabel('Aperture Width Outside Trace', fontsize=fontsize)
     ax.set_ylabel('Aperture Height Above Trace', fontsize=fontsize)
