@@ -1,3 +1,12 @@
+from tqdm import tqdm
+from exomast_api import exoMAST_API
+from arctor.utils import setup_and_plot_GTC, info_message, warning_message
+from arctor.utils import extract_map_only_data, create_results_df
+from arctor import Arctor
+import pandas as pd
+import os
+import numpy as np
+import joblib
 cannot_plot = False
 
 try:
@@ -16,17 +25,6 @@ except Exception as err:
     warning_message(f'{err}' +
                     '\n          You probably are running on a remote server')
 
-import joblib
-import numpy as np
-import os
-import pandas as pd
-
-from arctor import Arctor
-from arctor.utils import extract_map_only_data, create_results_df
-from arctor.utils import setup_and_plot_GTC, info_message, warning_message
-
-from exomast_api import exoMAST_API
-from tqdm import tqdm
 
 if __name__ == '__main__':
 
@@ -208,48 +206,6 @@ if __name__ == '__main__':
             ax.clear()
         except:
             fig, ax = plt.subplots()
-
-        # Values from Viviens predictions
-        n_colors = 8  # number of targets
-        color_array = np.array(plt.cm.plasma(np.linspace(0.1, 0.9, n_colors)))
-
-        colors_hex = []
-        for rgba in color_array:
-            rgb_ = np.round(rgba * 255).astype(int)[:3]
-            hex_ = '#%02x%02x%02x' % tuple(rgb_)
-            colors_hex.append(hex_)
-
-        eclipse_depths = {'WASP-52b': [271 / ppm, colors_hex[0]],
-                          'WASP-140b': [248 / ppm, colors_hex[1]],
-                          'WASP-43b': [536 / ppm, colors_hex[3]],
-                          'Qatar-1b': [310 / ppm, colors_hex[2]],
-                          'WASP-104b': [195 / ppm, colors_hex[4]],
-                          'WASP-95b': [150 / ppm, colors_hex[5]],
-                          'WASP-77b': [199 / ppm, colors_hex[6]],
-                          'TrES-3b': [385 / ppm, colors_hex[7]]}
-
-        eclipse_depths_scaled = {'WASP-52b': [487 / ppm, colors_hex[0]],
-                                 'WASP-140b': [683 / ppm, colors_hex[1]],
-                                 'Qatar-1b': [405 / ppm, colors_hex[2]],
-                                 'WASP-43b': [295 / ppm, colors_hex[3]],
-                                 'WASP-104b': [964 / ppm, colors_hex[4]],
-                                 'WASP-95b': [930 / ppm, colors_hex[5]],
-                                 'WASP-77b': [504 / ppm, colors_hex[6]],
-                                 'TrES-3b': [582 / ppm, colors_hex[7]]}
-
-        aper_column = 'aperture_sum_13x45'
-
-        ax = plotting.plot_predictions_with_wasp43(
-            planet, best_mcmc_params, eclipse_depths, wasp43,
-            aper_column=aper_column, n_pts_th=1000, t0_base=t0_guess,
-            error_scale=1.0, include_null=False, plot_raw=False,
-            min_yscale=1.7, max_yscale=1.7, ax=ax)  # min_yscale=6
-
-        fig = plt.gcf()
-        # plot_name_ = 'hst_cycle28_uvis_survey_target_scaled_predictions.pdf'
-        plot_name_ = 'hst_cycle28_uvis_survey_target_predictions.pdf'
-        if save_plot_now:
-            fig.savefig(os.path.join(plot_dir, plot_name_))
 
         # Values from L.C. Mayorga predictions
         eclipse_depths = {'fsed>0.1': [45.908286 / ppm, '--'],

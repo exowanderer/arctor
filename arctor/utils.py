@@ -1489,7 +1489,8 @@ def compute_outliers(instance, aper_colname='aperture_sum_176x116', n_sig=2):
 
 def extract_map_only_data(planet, idx_fwd, idx_rev,
                           maps_only_filename=None,
-                          data_dir='notebooks'):
+                          data_dir='../savefiles',
+                          use_pink_gp=False):
 
     if maps_only_filename is None:
         maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
@@ -1570,7 +1571,8 @@ def extract_map_only_data(planet, idx_fwd, idx_rev,
                 use_xcenters[-1],
                 use_ycenters[-1],
                 use_trace_angles[-1],
-                use_trace_lengths[-1])
+                use_trace_lengths[-1],
+                use_pink_gp=use_pink_gp)
 
             sdnr_apers.append(sdnr_)
             chisq_apers.append(chisq_)

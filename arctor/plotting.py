@@ -45,7 +45,7 @@ def plot_32_subplots_for_each_feature(aper_widths,
                                       ann_fontsize=14, axs=None):
 
     if one_fig and axs is None:
-        fig, axs = plt.subplots(nrows=4, ncols=8)
+        _, axs = plt.subplots(nrows=4, ncols=8)
     elif axs is not None:
         for ax in axs.flatten():
             ax.clear()
@@ -61,7 +61,7 @@ def plot_32_subplots_for_each_feature(aper_widths,
                             ax = axs.flatten()[counter]
                             counter = counter + 1
                         else:
-                            fig, ax = plt.subplots()
+                            _, ax = plt.subplots()
 
                         plot_aper_grid_per_feature(ax, n_options,
                                                    idx_split,
@@ -117,7 +117,7 @@ def plot_32_subplots_for_each_feature(aper_widths,
 
 def plot_map_model(times, phots, uncs, model, t0_guess,
                    fontsize=40, leg_fontsize=30):
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
 
     ax.errorbar(times - t0_guess, phots, uncs,
                 fmt='o', ms=10, label='WASP43b UVIS')
@@ -145,7 +145,7 @@ def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.scatter(idx_split[~idx_split] * width + 0 * width,
                res_diff_ppm[~idx_split],
@@ -207,14 +207,15 @@ def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
     ax.legend(loc=0, fontsize=fontsize)
 
 
+'''
 def plot_aper_width_grid(fontsize=40, leg_fontsize=30, ax=None):
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
-    rand0 = np.random.normal(0, 0.1, 3200)
+    # rand0 = np.random.normal(0, 0.1, 3200)
 
     ax.scatter(res_std_ppm[res_diff_ppm > 0],
                res_diff_ppm[res_diff_ppm > 0],
@@ -238,6 +239,7 @@ def plot_aper_width_grid(fontsize=40, leg_fontsize=30, ax=None):
                label='x:False y:False', marker='^')
 
     ax.legend(loc=0, fontsize=fontsize)
+'''
 
 
 def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
@@ -271,10 +273,6 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                                use_ycenters_,
                                use_trace_angles_,
                                use_trace_lengths_)
-    if one_fig:
-        size = 100000
-    else:
-        size = 200
 
     out = ax.scatter(aper_widths[sub_sect], aper_heights[sub_sect],
                      c=focus_[sub_sect],
@@ -352,7 +350,7 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
 
         left, bottom, width, height = ax.get_position().bounds
         cbaxes = fig.add_axes([left + width, bottom, 0.025, height])
-        cb = plt.colorbar(out, cax=cbaxes)
+        _ = plt.colorbar(out, cax=cbaxes)
 
 
 def plot_aperture_edges_with_angle(instance, img_id=42, fontsize=40, axs=None):
@@ -375,7 +373,7 @@ def plot_aperture_edges_with_angle(instance, img_id=42, fontsize=40, axs=None):
     aper_flat = RectangularAperture(positions[img_id], trace_width, 2, 0)
 
     if axs is None:
-        fig, axs = plt.subplots(nrows=2, ncols=2)
+        _, axs = plt.subplots(nrows=2, ncols=2)
     else:
         for ax in axs.flatten():
             ax.clear()
@@ -468,14 +466,14 @@ def uniform_scatter_plot(instance, xarr, yarr, include_orbits=False,
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
     if use_time_sort:
-        time_sort = np.argsort(instance.times)
+        _ = np.argsort(instance.times)
     else:
-        time_sort = np.arange(len(xarr))
+        _ = np.arange(len(xarr))
 
     ax.scatter(xarr[instance.idx_fwd] - xarr_center,
                yarr[instance.idx_fwd], s=size,
@@ -548,7 +546,7 @@ def circle_outliers(xarr, yarr, idx_fwd=None, idx_rev=None,
                     xarr_center=0, n_sig=3, ax=None):
     if ax is None:
         info_message('Creating `fig` and `ax`')
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     if idx_fwd is None or idx_rev is None:
         idx_fwd = np.arange(len(xarr))
@@ -581,7 +579,7 @@ def circle_orbits(times, xarr, yarr, xarr_center=0, ax=None):
 
     if ax is None:
         info_message('Creating `fig` and `ax`')
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     n_times = len(times)
     diff_times = np.diff(times)
@@ -994,7 +992,7 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=90,
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -1101,7 +1099,7 @@ def plot_kde_with_BCR_annotation_robust(
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -1309,7 +1307,7 @@ def plot_best_aic_light_curve(instance, map_solns,
                                                    idx_fwd, idx_rev)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -1484,7 +1482,7 @@ def plot_set_of_models(instance, mcmc_params, eclipse_depths, instance_params,
         times_th=times_th, eclipse_depth=None)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
     phots = instance.normed_photometry_df[aper_column].values.copy()
@@ -1601,7 +1599,7 @@ def plot_predictions_with_wasp43(
         times_th=times_th, eclipse_depth=None)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
     phots = instance.normed_photometry_df[aper_column].values.copy()
@@ -1686,7 +1684,7 @@ def plot_raw_light_curve(instance, aper_width, aper_height,
     aper_column = f'aperture_sum_{aper_width}x{aper_height}'
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -2304,7 +2302,7 @@ def plot_trace_over_time(instance, metric=np.sum, delta_y=50,
                          focus_xrange=False, outliers_rev=None,
                          outliers_fwd=None):
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
