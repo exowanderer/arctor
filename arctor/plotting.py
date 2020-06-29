@@ -1453,6 +1453,40 @@ def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
     return eclipse_model, line_model
 
 
+def find_data_for_figure4(instance, mcmc_params, eclipse_depths,
+                          instance_params, aper_column,
+                          n_pts_th=int(1e5), t0_base=0):
+    # To Send to ApJ
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times
+    times_th = np.linspace(times.min(), times.max(), n_pts_th)
+
+    period = instance_params.orbital_period
+    t0 = t0_base
+    b = instance_params.impact_parameter
+    u = [0]
+
+    xcenters = instance.trace_xcenters - np.median(instance.trace_xcenters)
+    ycenters = instance.trace_ycenters - np.median(instance.trace_ycenters)
+    trace_angles = instance.trace_angles - np.median(instance.trace_angles)
+    trace_lengths = instance.trace_lengths - np.median(instance.trace_lengths)
+
+    _, line_model = compute_line_and_eclipse_models(
+        mcmc_params, times, t0, u, period, b,
+        xcenters=xcenters, ycenters=ycenters,
+        trace_angles=trace_angles, trace_lengths=trace_lengths,
+        times_th=times_th, eclipse_depth=None)
+
+    phots = instance.normed_photometry_df[aper_column].values.copy()
+    uncs = instance.normed_uncertainty_df[aper_column].values.copy()
+
+    # phots_corrected = (phots - line_model)
+    df = pd.DataFrame(np.transpose([times, phots, uncs, line_model]),
+                      columns=['times_mjd', 'phots', 'phot_uncs', 'systematics'])
+    return df
+
+
 def plot_set_of_models(instance, mcmc_params, eclipse_depths, instance_params,
                        aper_column, n_pts_th=int(1e5), t0_base=0,
                        limb_dark=[0], plot_raw=False, ax=None,
@@ -1491,6 +1525,7 @@ def plot_set_of_models(instance, mcmc_params, eclipse_depths, instance_params,
     # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
     # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
     phots_corrected = (phots - line_model)
+
     min_corrected = (phots_corrected.min() - 1.1 * np.max(uncs)) * ppm
     max_corrected = (phots_corrected.max() + 1.1 * np.max(uncs)) * ppm
 
