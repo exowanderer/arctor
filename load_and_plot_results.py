@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     want_plot = False
     save_plot_now = False
-    planet_name = 'WASP43'
+    planet_name = 'PlanetName'
     file_type = 'flt.fits'
 
     # Identify where the stored MAP solns and MCMC posteriors are
@@ -57,18 +57,18 @@ if __name__ == '__main__':
 
     info_message(f'Setting `core_dir` to {core_dir}')
 
-    base_dir = os.path.join(core_dir, 'WASP43')
+    base_dir = os.path.join(core_dir, planet_name)
     save_dir = os.path.join(base_dir, 'savefiles')
 
-    data_dir = os.path.join(base_dir, 'data', 'UVIS', 'MAST_2019-07-03T0738')
+    data_dir = os.path.join(base_dir, 'path', 'to', 'flt', 'files')
     data_dir = os.path.join(data_dir, 'HST', 'FLTs')
 
-    working_dir = os.path.join(base_dir, 'github_analysis')
-    plot_dir = os.path.join(working_dir, 'paper', 'figures', 'pdfs')
+    working_dir = os.path.join(base_dir, 'path', 'to', 'analysis')
+    plot_dir = os.path.join(working_dir, 'path', 'to', 'figures')
     notebook_dir = os.path.join(working_dir, 'notebooks')
 
     planet = Arctor(planet_name, data_dir, save_dir, file_type)
-    joblib_filename = 'WASP43_savedict_206ppm_100x100_finescale.joblib.save'
+    joblib_filename = f'{planet_name}_savedict_XXXppm_100x100_finescale.joblib.save'
     joblib_filename = os.path.join(save_dir, joblib_filename)
 
     info_message('Loading Joblib Savefile to Populate `planet`')
@@ -82,17 +82,16 @@ if __name__ == '__main__':
     idx_fwd = planet.idx_fwd
     idx_rev = planet.idx_rev
 
-    wasp43 = exoMAST_API('WASP43b')
-    t0_wasp43 = wasp43.transit_time  # 55528.3684  # exo.mast.stsci.edu
-    period_wasp43 = wasp43.orbital_period
+    planet_info = exoMAST_API(f'{planet_name}b')
+    t0_planet = planet_info.transit_time  # 55528.3684  # exo.mast.stsci.edu
+    period_planet = planet_info.orbital_period
     n_epochs = np.int(
-        np.round(((np.median(times) - t0_wasp43) / period_wasp43) - 0.5))
-    t0_guess = t0_wasp43 + (n_epochs + 0.5) * period_wasp43
+        np.round(((np.median(times) - t0_planet) / period_planet) - 0.5))
+    t0_guess = t0_planet + (n_epochs + 0.5) * period_planet
 
-    data_dir = os.path.join(core_dir, 'WASP43', 'github_analysis',
-                            'notebooks', 'all400_results_decor_MAPs_only_SDNR')
+    data_dir = os.path.join(core_dir, 'path', 'to', 'notebooks', 'savefiles')
     # maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
-    maps_only_filename = 'results_decor_span_MAPs_only_SDNR_aperture_sum_13x45.joblib.save'
+    maps_only_filename = f'results_decor_span_MAPs_only_SDNR_aperture_sum_{best_width}x{best_height}.joblib.save'
     maps_only_filename = os.path.join(data_dir, maps_only_filename)
 
     try:
@@ -213,7 +212,7 @@ if __name__ == '__main__':
         aper_column = 'aperture_sum_13x45'
 
         ax = plotting.plot_set_of_models(planet, best_mcmc_params,
-                                         eclipse_depths, wasp43,
+                                         eclipse_depths, planet_info,
                                          aper_column=aper_column,
                                          n_pts_th=1000, t0_base=t0_guess,
                                          include_null=False, plot_raw=False,
@@ -460,7 +459,7 @@ if __name__ == '__main__':
 
         axs = plotting.plot_aperture_edges_with_angle(
             planet, img_id=42, fontsize=40, axs=axs)
-        plot_name_ = 'New_WASP43_UVIS_aperture_zoom_before_and_after_tilt.pdf'
+        plot_name_ = f'{planet_name}_UVIS_aperture_zoom_before_and_after_tilt.pdf'
         plt.tight_layout()
         if save_plot_now:
             fig.savefig(os.path.join(plot_dir, plot_name_))
@@ -493,7 +492,7 @@ if __name__ == '__main__':
                                      inner_annular=inner_annular,
                                      outer_annular=outer_annular,
                                      lw=5, ax=ax)
-        plot_name_ = 'New_WASP43_UVIS_aperture_photometry_'
+        plot_name_ = f'{planet_name}_UVIS_aperture_photometry_'
         plot_name_ = plot_name_ + 'and_median_background.pdf'
         if save_plot_now:
             fig.savefig(os.path.join(plot_dir, plot_name_))
