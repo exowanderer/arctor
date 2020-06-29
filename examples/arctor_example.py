@@ -42,9 +42,9 @@ if __name__ == '__main__':
     file_type = clargs.file_type
 
     # HOME = os.environ['HOME']
-    base_dir = os.path.join('/', 'bigData', 'Research', 'Planets', planet_name)
-    data_dir = os.path.join(base_dir, 'data', 'UVIS', 'HST', 'FLTs')
-    working_dir = os.path.join(base_dir, 'github_analysis')
+    base_dir = os.path.join('/', 'path', 'to', 'base')
+    data_dir = os.path.join(base_dir, 'path', 'to', 'data')
+    working_dir = os.path.join(base_dir, 'analysis')
     save_dir = os.path.join(base_dir, 'savefiles')
 
     assert(os.path.exists(base_dir)), (
