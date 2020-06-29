@@ -41,19 +41,7 @@ if __name__ == '__main__':
     aper_width_bic_best = 13
     aper_height_bic_best = 45
 
-    if os.path.exists(os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')):
-        core_dir = os.path.join('/', 'Volumes', 'WhenImSixtyFourGB')
-    elif os.path.exists(
-            os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')):
-        core_dir = os.path.join('/', 'media', 'jonathan', 'WhenImSixtyFourGB')
-    else:
-        core_dir = 'None'
-        warning_message('No path exists to `core_dir`; setting to "None"')
-
-    if not os.path.exists(core_dir):
-        core_dir = os.path.join(HOME, 'Research', 'Planets')
-        assert(os.path.exists(core_dir)),\
-            'Did not find either Laptop or Server Directory Structure'
+    core_dir = os.path.join('/', 'path', 'to', 'core', 'dir')
 
     info_message(f'Setting `core_dir` to {core_dir}')
 
