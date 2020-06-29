@@ -709,7 +709,7 @@ def configure_save_name(base_name=None, working_dir='', do_mcmc=True,
                         allow_negative_edepths=False):
 
     if base_name is None:
-        base_name = 'WASP43_fine_grain_photometry_20x20_208ppm'
+        base_name = f'{planet_name}_fine_grain_photometry_20x20_208ppm'
 
     fname_split = {True: 'w_fwd_rev_split',
                    False: 'no_fwd_rev_split'}[use_rev_fwd_split]
@@ -1005,7 +1005,7 @@ def run_all_12_options(times, flux, uncs,
                        tune=3000, draws=3000, target_accept=0.9,
                        do_mcmc=False, save_as_you_go=False,
                        injected_light_curve=1.0, working_dir='./',
-                       base_name='WASP43_fine_grain_photometry_208ppm'):
+                       base_name=f'{planet_name}_fine_grain_photometry_208ppm'):
 
     decor_set = [xcenters, ycenters, trace_angles, trace_lengths]
     decor_options = [None, None, None, None,
@@ -1079,7 +1079,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
                              tune=3000, draws=3000, target_accept=0.9,
                              do_mcmc=False, save_as_you_go=False,
                              injected_light_curve=1.0,
-                             base_name='WASP43_fine_grain_photometry_208ppm'):
+                             base_name=f'{planet_name}_fine_grain_photometry_208ppm'):
 
     base_name = f'{base_name}_near_best_{n_space}x{n_space}'
 
@@ -1090,7 +1090,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1112,7 +1112,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1134,7 +1134,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1157,7 +1157,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
           'Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1180,7 +1180,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43, idx_fwd=idx_fwd, idx_rev=idx_rev,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet, idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         injected_light_curve=injected_light_curve,
         base_name=base_name, working_dir=working_dir,
@@ -1201,7 +1201,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43, idx_fwd=idx_fwd, idx_rev=idx_rev,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet, idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         injected_light_curve=injected_light_curve,
         base_name=base_name, working_dir=working_dir,
@@ -1223,7 +1223,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1247,7 +1247,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
           'Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1270,7 +1270,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1293,7 +1293,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1314,7 +1314,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1337,7 +1337,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
