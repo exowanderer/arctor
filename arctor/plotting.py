@@ -120,7 +120,7 @@ def plot_map_model(times, phots, uncs, model, t0_guess,
     _, ax = plt.subplots()
 
     ax.errorbar(times - t0_guess, phots, uncs,
-                fmt='o', ms=10, label='WASP43b UVIS')
+                fmt='o', ms=10, label='PlanetName b UVIS')
     ax.plot(times - t0_guess, model, 'k--', lw=3, label='MAP Model')
 
     ax.legend(loc=0, fontsize=leg_fontsize)
@@ -1602,7 +1602,7 @@ def plot_set_of_models(instance, mcmc_params, eclipse_depths, instance_params,
     return ax
 
 
-def plot_predictions_with_wasp43(
+def plot_predictions_with_planet(
         instance, mcmc_params, eclipse_depths, instance_params,
         aper_column, n_pts_th=int(1e5), t0_base=0,
         min_yscale=1.4, max_yscale=1.4, error_scale=1.0,
