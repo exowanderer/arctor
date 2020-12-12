@@ -10,7 +10,7 @@ from astropy.io import fits
 from astropy.modeling.models import Gaussian1D, Linear1D
 from astropy.modeling.fitting import LevMarLSQFitter, LinearLSQFitter
 # from astropy.modeling.fitting import SLSQPLSQFitter
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import sigma_clipped_stats, mad_std
 from astropy.visualization import simple_norm
 from functools import partial
 from glob import glob
@@ -23,10 +23,13 @@ from time import time
 from tqdm import tqdm
 
 from .utils import (
-    center_one_trace,  # instantiate_arctor, create_raw_lc_stddev,
-    fit_one_slopes, cosmic_ray_flag_simple,  # cosmic_ray_flag_rolling,
-    aper_table_2_df, make_mask_cosmic_rays_temporal_simple,
-    check_if_column_exists)
+    center_one_trace,
+    fit_one_slopes,
+    cosmic_ray_flag_simple,
+    aper_table_2_df,
+    make_mask_cosmic_rays_temporal_simple,
+    check_if_column_exists,
+    rename_file)
 
 import warnings
 from astropy.utils.exceptions import AstropyWarning
@@ -51,7 +54,9 @@ class Arctor(object):
 
     def __init__(self, planet_name='planetName', data_dir='./',
                  working_dir='./', file_type='flt.fits'):
+
         info_message('Initializing Instance of the `Arctor` Object')
+
         self.planet_name = planet_name
         self.data_dir = data_dir
         self.working_dir = working_dir
@@ -156,7 +161,9 @@ class Arctor(object):
             self.image_stack[k] = image_clean_
             self.cosmic_rays[k] = cosmic_rays_
 
-    def center_all_traces(self, stddev=2, notit_verbose=False, idx_buffer=10):
+    def center_all_traces(self, stddev=2, notit_verbose=False,
+                          idx_buffer=10, verbose=False):
+
         info_message('Computing the Center of the Trace')
         if not hasattr(self, 'height') or not hasattr(self, 'width'):
             self.height, self.width = self.image_shape
@@ -174,8 +181,9 @@ class Arctor(object):
                                 total=self.n_images):
             self.center_traces[kimg] = {}
 
-            start = time()
-            info_message(f'Starting Multiprocess for Image {kimg}')
+            if verbose:
+                start = time()
+                info_message(f'Starting Multiprocess for Image {kimg}')
 
             zipper = zip(np.arange(self.width), image.T)
 
@@ -187,9 +195,10 @@ class Arctor(object):
             # center_traces_ = [partial_center_one_trace(*entry)
             #                   for entry in zipper]
 
-            rtime = time() - start
-            info_message(f'Center computing Image {kimg} '
-                         f'took {rtime:0.2f} seconds')
+            if verbose:
+                rtime = time() - start
+                info_message(f'Center computing Image {kimg} '
+                             f'took {rtime:0.2f} seconds')
 
             for kcol, results, fitter in center_traces_:
                 self.center_traces[kimg][kcol] = {}
@@ -209,7 +218,7 @@ class Arctor(object):
         partial_fit_slp = partial(fit_one_slopes,
                                   y_idx=self.y_idx,
                                   fitter=LinearLSQFitter(),
-                                  slope_guess=2.0 / 466)
+                                  slope_guess=5e-3)
 
         zipper = zip(np.arange(self.n_images),
                      self.gaussian_centers[:, self.x_left_idx:self.x_right_idx])
@@ -230,10 +239,37 @@ class Arctor(object):
 
         self.trace_angles = np.arctan(self.trace_slopes)
 
+    def compute_trace_slopes(self, stddev=2,
+                             notit_verbose=False,
+                             x_offset=100):
+        info_message('Fitting a slope to the Center of the Trace')
+        if not hasattr(self, 'center_traces'):
+            self.center_all_traces(stddev=stddev, notit_verbose=notit_verbose)
+
+        self.gaussian_centers = np.zeros((self.n_images, self.width))
+        for kimg, val0 in self.center_traces.items():
+            for kcol, val1 in val0.items():
+                self.gaussian_centers[kimg][kcol] = val1['results'].mean.value
+
+        x_left = self.x_left_idx + x_offset
+        x_right = self.x_right_idx - x_offset
+
+        self.trace_slopes = np.ones(self.n_images)
+        self.trace_ycenters = np.ones(self.n_images)
+        for kimg, gcenters_ in enumerate(self.gaussian_centers):
+            slope_ = np.median(np.diff(gcenters_[x_left:x_right]))
+            intercept_ = np.median(gcenters_[x_left:x_right])
+
+            self.trace_slopes[kimg] = slope_
+            self.trace_ycenters[kimg] = intercept_
+
+        self.trace_angles = np.arctan(self.trace_slopes)
+
     def compute_sky_background(self, subpixels=32, positions=None,
-                               inner_width=None, outer_width=None,
-                               inner_height=None, outer_height=None,
-                               thetas=None, notit_verbose=False, done_it=False):
+                               inner_width=75, outer_width=150,
+                               inner_height=225, outer_height=350,
+                               thetas=None, notit_verbose=False,
+                               done_it=False):
         '''
             Run photometry for a specifc set of rectangles
 
@@ -247,16 +283,6 @@ class Arctor(object):
         '''
 
         n_images = self.n_images  # convenience for minimizing command lengths
-
-        if inner_width is None:
-            inner_width = 75
-        if outer_width is None:
-            outer_width = 150
-
-        if inner_height is None:
-            inner_height = 225
-        if outer_height is None:
-            outer_height = 350
 
         if positions is None:
             xcenters_ = self.trace_xcenters
@@ -409,15 +435,8 @@ class Arctor(object):
 
     def do_multi_phot(self, aper_widths, aper_heights,
                       subpixels=32, positions=None, thetas=None):
+
         info_message('Beginning Multi-Aperture Photometry')
-        # info_message(
-        #     'Parameters:\n'
-        #     f'AperWidths:{np.min(aper_widths)}-{np.max(aper_widths)}\n'
-        #     f'AperHeights:{np.min(aper_heights)}-{np.max(aper_heights)}\n'
-        #     f'SubPixels:{subpixels}\n'
-        #     f'Positions:{np.median(positions)}\n'
-        #     f'Thetas:{np.median(thetas)}'
-        # )
 
         if positions is None:
             xcenters_ = self.trace_xcenters
@@ -428,17 +447,7 @@ class Arctor(object):
             thetas = self.trace_angles
 
         aper_widths = self.trace_length + aper_widths
-        '''
-        if not hasattr(self, 'fluxes'):
-            self.fluxes = {}
-            self.fluxes['apertures'] = {}
-            self.fluxes['positions'] = {}
-            self.fluxes['aper_width'] = {}
-            self.fluxes['aper_height'] = {}
-            self.fluxes['thetas'] = {}
-            self.fluxes['fluxes'] = {}
-            self.fluxes['errors'] = {}
-        '''
+
         info_message('Creating Apertures')
         n_apertures = 0
         apertures_stack = []
@@ -462,9 +471,9 @@ class Arctor(object):
         zipper_ = zip(image_minus_sky_, apertures_stack)
 
         operation = 'Aperture Photometry per Image'
-        # aper_phots = [partial_aper_phot(*entry) for entry in tqdm(zipper_)]
-        start = time()
+
         info_message(f'Computing {operation}')
+        start = time()
         pool = mp.Pool(mp.cpu_count() - 1)
         aper_phots = pool.starmap(partial_aper_phot, zipper_)
         pool.close()
@@ -490,6 +499,11 @@ class Arctor(object):
             aper_phots, np.int32(aper_widths - self.trace_length),
             np.int32(aper_heights), self.n_images)
 
+        if 'ycenter' in photometry_df.columns:
+            photometry_df.drop(['ycenter'], axis=1, inplace=True)
+        if 'xcenter' in photometry_df.columns:
+            photometry_df.drop(['ycenter'], axis=1, inplace=True)
+
         # Store new dataframe to object dataframe
         if not hasattr(self, 'photometry_df'):
             self.photometry_df = photometry_df
@@ -508,61 +522,107 @@ class Arctor(object):
                 info_message(f'Adding column {colname} to self.photometry_df')
                 self.photometry_df[colname] = photometry_df[colname0]
 
-        # Storing Normalized Photometry
-        med_photometry_df = np.median(self.photometry_df, axis=0)
-        self.normed_photometry_df = self.photometry_df / med_photometry_df
-        self.normed_uncertainty_df = np.sqrt(
-            self.photometry_df) / med_photometry_df
+        self.compute_normalized_photometry()
 
-        self.normed_photometry_df['xcenter'] = self.photometry_df['xcenter']
-        self.normed_photometry_df['ycenter'] = self.photometry_df['ycenter']
+    def compute_normalized_photometry(self, n_sig=None):
+        ''' I found that n_sig=7 produces no NaNs '''
+        # Creating Normalized Photometry DataFrames [Placeholders]
+        normed_photometry_df = self.photometry_df.values.copy()
+        normed_uncertainty_df = np.sqrt(self.photometry_df.values).copy()
 
-    def load_data(self, load_filename=None):
+        # Isolate the input values
+        phot_fwd = self.photometry_df.iloc[self.idx_fwd]
+        phot_rev = self.photometry_df.iloc[self.idx_rev]
+        med_fwd = np.median(phot_fwd, axis=0)
+        med_rev = np.median(phot_rev, axis=0)
+
+        if n_sig is not None and n_sig > 0:
+            sigma_fwd = mad_std(phot_fwd)
+            sigma_rev = mad_std(phot_rev)
+            inliers_fwd = np.abs(phot_fwd - med_fwd) < n_sig * sigma_fwd
+            inliers_rev = np.abs(phot_rev - med_rev) < n_sig * sigma_rev
+            med_fwd = np.median(phot_fwd[inliers_fwd], axis=0)
+            med_rev = np.median(phot_rev[inliers_rev], axis=0)
+
+        # Store the normalized values
+        normed_photometry_df[self.idx_fwd] = phot_fwd / med_fwd
+        normed_photometry_df[self.idx_rev] = phot_rev / med_rev
+        normed_uncertainty_df[self.idx_fwd] = np.sqrt(phot_fwd) / med_fwd
+        normed_uncertainty_df[self.idx_rev] = np.sqrt(phot_rev) / med_rev
+
+        self.normed_photometry_df = pd.DataFrame(
+            normed_photometry_df, columns=self.photometry_df.columns
+        )
+        self.normed_uncertainty_df = pd.DataFrame(
+            normed_uncertainty_df, columns=self.photometry_df.columns
+        )
+
+    def rename_fits_files_by_time(self, base_time=2400000.5,
+                                  format='jd', scale='utc'):
+        data_filenames = os.listdir(self.data_dir)
+        info_message(f'The first filename is {data_filenames[0]}')
+        check = input('\nWould you like to change the filenames? (yes/no) ')
+        if 'yes' not in check.lower()[:3]:
+            info_message('Keeping filenames as they are.')
+            return
+
+        for filename in tqdm(data_filenames):
+            if self.file_type in filename:
+                rename_file(filename, data_dir=self.data_dir,
+                            base_time=base_time, format=format, scale=scale)
+
+    def load_data(self, load_filename=None, sort_by_time=False):
+        def create_fits_dict_key(filename):
+            return os.path.basename(filename).strip(f'{self.file_type}_')
+
         info_message(f'Loading Fits Files')
         self.fits_dict = {}
-        fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
-        for fname in tqdm(fits_filenames, total=len(fits_filenames)):
-            key = fname.split('/')[-1].split('_')[0]
-            val = fits.open(fname)
-            self.fits_dict[key] = val
+        self.fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
+        self.fits_filenames = np.sort(self.fits_filenames)
+        self.n_files = len(self.fits_filenames)
+        self.order_fits_names = []
+        for filename in tqdm(self.fits_filenames, total=self.n_files):
+            key = create_fits_dict_key(filename)
+            with fits.open(filename) as val:
+                self.fits_dict[key] = val
+                self.order_fits_names.append(key)
 
         if load_filename is not None:
             info_message(f'Loading Save Object-Dict File')
             self.load_dict(load_filename)
         else:
             info_message(f'Creating New Flux/Error/Time Attributes')
-            fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
+            # fits_filenames = glob(f'{self.data_dir}/*{self.file_type}')
 
             times = []
             image_stack = []
             errors_stack = []
-            # fits_dict = {}
-            for fname in tqdm(fits_filenames, total=len(fits_filenames)):
-                key = fname.split('/')[-1].split('_')[0]
-                val = fits.open(fname)
-                # fits_dict[key] = val
-                header = val['PRIMARY'].header
-                image = val['SCI'].data
-                image_stack.append(image.copy())
-                errors_stack.append(val['ERR'].data)
-                times.append(np.mean([header['EXPEND'], header['EXPSTART']]))
+            for filename in tqdm(self.fits_filenames, total=self.n_files):
+                key = create_fits_dict_key(filename)
+                with fits.open(filename) as val:
+                    self.fits_dict[key] = val
+                    # fits_dict[key] = val
+                    header = val['PRIMARY'].header
+                    image = val['SCI'].data
+                    image_stack.append(image.copy())
+                    errors_stack.append(val['ERR'].data)
+                    times.append(
+                        np.mean([header['EXPEND'], header['EXPSTART']])
+                    )
 
             # times_sort = np.argsort(times)
             self.times = np.array(times)  # [times_sort]
             self.image_stack = np.array(image_stack)  # [times_sort]
             self.errors_stack = np.array(errors_stack)  # [times_sort]
 
-            # self.fits_dict = fits_dict
-            if hasattr(self, 'image_stack'):
-                image_shape = self.image_stack[0].shape
-                n_images = self.image_stack.shape[0]
-            else:
-                image_shape = 400, 951
-                n_images = 75
+            if sort_by_time:
+                time_argsort = self.times.argsort()
+                self.times = self.times[time_argsort]
+                self.image_stack = self.image_stack[time_argsort]
+                self.errors_stack = self.errors_stack[time_argsort]
 
-            self.image_shape = image_shape
-            self.n_images = n_images
-
+            self.image_shape = image_shape = self.image_stack[0].shape
+            self.n_images = self.image_stack.shape[0]
             self.height, self.width = self.image_shape
 
         info_message(f'Found {self.n_images} {self.file_type} files')
@@ -574,8 +634,22 @@ class Arctor(object):
 
             self.simple_fluxes[kimg] = np.sum(image - np.median(image))
 
-    def calibration_trace_location(self, oversample=100,
-                                   x_left=450, x_right=900):
+    def compute_min_aper_phots(self, y_width=100):
+        delta_y = 0.5 * y_width
+        self.min_aper_flux = np.zeros(self.n_images)
+        self.min_aper_unc = np.zeros(self.n_images)
+
+        xmin = np.round(self.trace_xmins.max()).astype(int)
+        xmax = np.round(self.trace_xmaxs.min()).astype(int)
+        for kimg, (image, yc) in enumerate(zip(self.image_stack,
+                                               self.trace_ycenters)):
+            ymin = np.round(yc - delta_y).astype(int)
+            ymax = np.round(yc + delta_y).astype(int)
+            subframe = image[ymin:ymax, xmin:xmax]
+            self.min_aper_flux[kimg] = np.sum(subframe - np.median(subframe))
+            self.min_aper_unc[kimg] = np.std(subframe - np.median(subframe))
+
+    def calibration_trace_location(self, oversample=100):
         info_message(f'Calibration the Median Trace Location')
 
         # Median Argmax
@@ -585,6 +659,8 @@ class Arctor(object):
         # Median Trace configuration as the 'stellar template'
         self.median_trace = np.sum(self.median_image, axis=0)
         self.y_idx = np.median(self.median_image.argmax(axis=0)).astype(int)
+        self.y_idx_s = np.median(self.image_stack.argmax(axis=1), axis=1)
+        self.y_idx_s = self.y_idx_s.astype(int)
 
         # Set left and right markers at halfway up the trace
         peak_trace = self.median_trace > 0.5 * self.median_trace.max()
@@ -604,8 +680,8 @@ class Arctor(object):
         info_message(f'Calibration the Per Image Trace Location')
         # Trace configuration per image
         self.y_argmaxes = np.zeros(self.n_images)
-        self.trace_mins = np.zeros(self.n_images)
-        self.trace_maxs = np.zeros(self.n_images)
+        self.trace_xmins = np.zeros(self.n_images)
+        self.trace_xmaxs = np.zeros(self.n_images)
         for kimg, image in tqdm(enumerate(self.image_stack),
                                 total=self.n_images):
             image_trace_ = np.sum(image, axis=0)
@@ -618,11 +694,11 @@ class Arctor(object):
 
             # Set left and right markers at halfway up the trace
             peak_trace_ = os_trace > 0.5 * os_trace.max()
-            self.trace_mins[kimg] = os_xarr[np.where(peak_trace_)[0].min()]
-            self.trace_maxs[kimg] = os_xarr[np.where(peak_trace_)[0].max()]
+            self.trace_xmins[kimg] = os_xarr[np.where(peak_trace_)[0].min()]
+            self.trace_xmaxs[kimg] = os_xarr[np.where(peak_trace_)[0].max()]
 
-        self.trace_xcenters = 0.5 * (self.trace_mins + self.trace_maxs)
-        self.trace_lengths = (self.trace_maxs - self.trace_mins)
+        self.trace_xcenters = 0.5 * (self.trace_xmins + self.trace_xmaxs)
+        self.trace_lengths = (self.trace_xmaxs - self.trace_xmins)
 
         self.trace_location_calibrated = True
     """
@@ -648,6 +724,18 @@ class Arctor(object):
     """
 
     def identify_trace_direction(self):
+        def verify_postargs(postargs, num_postargs=2):
+            uniq_postargs = np.unique(postargs)
+
+            while len(uniq_postargs) > num_postargs:
+                counts = [np.sum(upt == postargs) for upt in uniq_postargs]
+                argmin = np.argmin(counts)
+                left = uniq_postargs[:argmin]
+                right = uniq_postargs[argmin + 1:]
+                uniq_postargs = np.r_[left, right]
+
+            return uniq_postargs
+
         info_message(f'Identifying Trace Direction per Image')
         postargs1 = np.zeros(len(self.fits_dict))
         postargs2 = np.zeros(len(self.fits_dict))
@@ -655,8 +743,8 @@ class Arctor(object):
             postargs1[k] = val['PRIMARY'].header['POSTARG1']
             postargs2[k] = val['PRIMARY'].header['POSTARG2']
 
-        postargs1_rev, postargs1_fwd = np.unique(postargs1)
-        postargs2_rev, postargs2_fwd = np.unique(postargs2)
+        postargs1_rev, postargs1_fwd = verify_postargs(postargs1)
+        postargs2_rev, postargs2_fwd = verify_postargs(postargs2)
 
         self.idx_fwd = np.where(np.bitwise_and(postargs1 == postargs1_fwd,
                                                postargs2 == postargs2_fwd))[0]

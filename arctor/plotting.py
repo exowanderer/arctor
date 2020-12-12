@@ -4,20 +4,22 @@ from astropy.modeling.models import Planar2D, Linear1D
 from astropy.modeling.fitting import LinearLSQFitter
 from astropy.visualization import simple_norm
 from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+
 from photutils import RectangularAperture
 from tqdm import tqdm
 
 from scipy.special import erf
 from sklearn.neighbors import KernelDensity
-from statsmodels.robust import scale as sc
 
 import exoplanet as xo
 import numpy as np
 import pandas as pd
 
 from arctor.utils import find_flux_stddev, print_flux_stddev
-from arctor.utils import get_flux_idx_from_df, create_sub_sect
+from arctor.utils import create_sub_sect, compute_inliers
 from arctor.utils import get_map_results_models
+from astropy.stats import sigma_clip, mad_std
 
 
 def debug_message(message, end='\n'):
@@ -43,7 +45,7 @@ def plot_32_subplots_for_each_feature(aper_widths,
                                       ann_fontsize=14, axs=None):
 
     if one_fig and axs is None:
-        fig, axs = plt.subplots(nrows=4, ncols=8)
+        _, axs = plt.subplots(nrows=4, ncols=8)
     elif axs is not None:
         for ax in axs.flatten():
             ax.clear()
@@ -59,7 +61,7 @@ def plot_32_subplots_for_each_feature(aper_widths,
                             ax = axs.flatten()[counter]
                             counter = counter + 1
                         else:
-                            fig, ax = plt.subplots()
+                            _, ax = plt.subplots()
 
                         plot_aper_grid_per_feature(ax, n_options,
                                                    idx_split,
@@ -115,10 +117,10 @@ def plot_32_subplots_for_each_feature(aper_widths,
 
 def plot_map_model(times, phots, uncs, model, t0_guess,
                    fontsize=40, leg_fontsize=30):
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
 
     ax.errorbar(times - t0_guess, phots, uncs,
-                fmt='o', ms=10, label='WASP43b UVIS')
+                fmt='o', ms=10, label='PlanetName b UVIS')
     ax.plot(times - t0_guess, model, 'k--', lw=3, label='MAP Model')
 
     ax.legend(loc=0, fontsize=leg_fontsize)
@@ -138,92 +140,106 @@ def plot_map_model(times, phots, uncs, model, t0_guess,
 def plot_feature_vs_res_diff(idx_split, use_xcenters, use_ycenters,
                              use_trace_angles, use_trace_lengths,
                              res_diff_ppm, width=1e-3,
-                             fontsize=40, leg_fontsize=30):
-    plt.scatter(idx_split[~idx_split] * width + 0 * width,
-                res_diff_ppm[~idx_split],
-                alpha=0.1, edgecolors='None')
-    plt.scatter(idx_split[idx_split] * width + 0 * width,
-                res_diff_ppm[idx_split],
-                alpha=0.1, edgecolors='None')
+                             fontsize=40, leg_fontsize=30., ax=None):
 
-    plt.scatter(use_xcenters[~use_xcenters] * width + 1 * width,
-                res_diff_ppm[~use_xcenters],
-                alpha=0.1, edgecolors='None')
-    plt.scatter(use_xcenters[use_xcenters] * width + 1 * width,
-                res_diff_ppm[use_xcenters],
-                alpha=0.1, edgecolors='None')
+    plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    plt.scatter(use_ycenters[~use_ycenters] * width + 2 * width,
-                res_diff_ppm[~use_ycenters],
-                alpha=0.1, edgecolors='None')
-    plt.scatter(use_ycenters[use_ycenters] * width + 2 * width,
-                res_diff_ppm[use_ycenters],
-                alpha=0.1, edgecolors='None')
+    if ax is None:
+        _, ax = plt.subplots()
 
-    plt.scatter(use_trace_angles[use_trace_angles] * width + 3 * width,
-                res_diff_ppm[~use_trace_angles],
-                alpha=0.1, edgecolors='None')
-    plt.scatter(use_trace_angles[use_trace_angles] * width + 3 * width,
-                res_diff_ppm[use_trace_angles],
-                alpha=0.1, edgecolors='None')
+    ax.scatter(idx_split[~idx_split] * width + 0 * width,
+               res_diff_ppm[~idx_split],
+               alpha=0.1, edgecolors='None')
+    ax.scatter(idx_split[idx_split] * width + 0 * width,
+               res_diff_ppm[idx_split],
+               alpha=0.1, edgecolors='None')
 
-    plt.scatter(use_trace_lengths[~use_trace_lengths] * width + 4 * width,
-                res_diff_ppm[~use_trace_lengths],
-                alpha=0.1, edgecolors='None')
-    plt.scatter(use_trace_lengths[use_trace_lengths] * width + 4 * width,
-                res_diff_ppm[use_trace_lengths],
-                alpha=0.1, edgecolors='None')
+    ax.scatter(use_xcenters[~use_xcenters] * width + 1 * width,
+               res_diff_ppm[~use_xcenters],
+               alpha=0.1, edgecolors='None')
+    ax.scatter(use_xcenters[use_xcenters] * width + 1 * width,
+               res_diff_ppm[use_xcenters],
+               alpha=0.1, edgecolors='None')
 
-    plt.scatter([], [],
-                label='IDX Split False', edgecolors='None', color=plasmas[0])
-    plt.scatter([], [],
-                label='IDX Split True', edgecolors='None', color=plasmas[2])
-    plt.scatter([], [],
-                label='Use Xcenters False', edgecolors='None', color='C2')
-    plt.scatter([], [],
-                label='Use Xcenters True', edgecolors='None', color='C3')
-    plt.scatter([], [],
-                label='Use Ycenters False', edgecolors='None', color='C4')
-    plt.scatter([], [],
-                label='Use Ycenters True', edgecolors='None', color='C5')
-    plt.scatter([], [],
-                label='Use Trace Angles False', edgecolors='None', color='C6')
-    plt.scatter([], [],
-                label='Use Trace Angles True', edgecolors='None', color='C7')
-    plt.scatter([], [],
-                label='Use Trace Lengths False', edgecolors='None', color='C8')
-    plt.scatter([], [],
-                label='Use Trace Lengths True', edgecolors='None', color='C9')
+    ax.scatter(use_ycenters[~use_ycenters] * width + 2 * width,
+               res_diff_ppm[~use_ycenters],
+               alpha=0.1, edgecolors='None')
+    ax.scatter(use_ycenters[use_ycenters] * width + 2 * width,
+               res_diff_ppm[use_ycenters],
+               alpha=0.1, edgecolors='None')
 
-    plt.xlim(-width, None)
-    plt.legend(loc=0, fontsize=fontsize)
+    ax.scatter(use_trace_angles[use_trace_angles] * width + 3 * width,
+               res_diff_ppm[~use_trace_angles],
+               alpha=0.1, edgecolors='None')
+    ax.scatter(use_trace_angles[use_trace_angles] * width + 3 * width,
+               res_diff_ppm[use_trace_angles],
+               alpha=0.1, edgecolors='None')
+
+    ax.scatter(use_trace_lengths[~use_trace_lengths] * width + 4 * width,
+               res_diff_ppm[~use_trace_lengths],
+               alpha=0.1, edgecolors='None')
+    ax.scatter(use_trace_lengths[use_trace_lengths] * width + 4 * width,
+               res_diff_ppm[use_trace_lengths],
+               alpha=0.1, edgecolors='None')
+
+    ax.scatter([], [],
+               label='IDX Split False', edgecolors='None', color=plasmas[0])
+    ax.scatter([], [],
+               label='IDX Split True', edgecolors='None', color=plasmas[2])
+    ax.scatter([], [],
+               label='Use Xcenters False', edgecolors='None', color='C2')
+    ax.scatter([], [],
+               label='Use Xcenters True', edgecolors='None', color='C3')
+    ax.scatter([], [],
+               label='Use Ycenters False', edgecolors='None', color='C4')
+    ax.scatter([], [],
+               label='Use Ycenters True', edgecolors='None', color='C5')
+    ax.scatter([], [],
+               label='Use Trace Angles False', edgecolors='None', color='C6')
+    ax.scatter([], [],
+               label='Use Trace Angles True', edgecolors='None', color='C7')
+    ax.scatter([], [],
+               label='Use Trace Lengths False', edgecolors='None', color='C8')
+    ax.scatter([], [],
+               label='Use Trace Lengths True', edgecolors='None', color='C9')
+
+    ax.set_xlim(-width, None)
+    ax.legend(loc=0, fontsize=fontsize)
 
 
-def plot_aper_width_grid(fontsize=40, leg_fontsize=30):
-    rand0 = np.random.normal(0, 0.1, 3200)
+'''
+def plot_aper_width_grid(fontsize=40, leg_fontsize=30, ax=None):
 
-    plt.scatter(res_std_ppm[res_diff_ppm > 0],
-                res_diff_ppm[res_diff_ppm > 0],
-                c=res_diff_ppm[res_diff_ppm > 0])
+    if ax is None:
+        _, ax = plt.subplots()
 
-    plt.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
-                (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
-                c=res_std_ppm, alpha=0.25, label='x:True y:False', marker='o')
+    ax.clear()
 
-    plt.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
-                (aper_heights + 0.25 * use_ycenters)[use_ycenters],
-                c=res_std_ppm, alpha=0.25, label='x:True y:True', marker='s')
+    # rand0 = np.random.normal(0, 0.1, 3200)
 
-    plt.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
-                (aper_heights + 0.25 * use_ycenters)[use_ycenters],
-                c=res_std_ppm, alpha=0.25, label='x:False y:True', marker='*')
+    ax.scatter(res_std_ppm[res_diff_ppm > 0],
+               res_diff_ppm[res_diff_ppm > 0],
+               c=res_diff_ppm[res_diff_ppm > 0])
 
-    plt.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
-                (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
-                c=res_std_ppm[~use_xcenters], alpha=0.25,
-                label='x:False y:False', marker='^')
+    ax.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
+               (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
+               c=res_std_ppm, alpha=0.25, label='x:True y:False', marker='o')
 
-    plt.legend(loc=0, fontsize=fontsize)
+    ax.scatter((aper_widths + 0.25 * use_xcenters)[use_xcenters],
+               (aper_heights + 0.25 * use_ycenters)[use_ycenters],
+               c=res_std_ppm, alpha=0.25, label='x:True y:True', marker='s')
+
+    ax.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
+               (aper_heights + 0.25 * use_ycenters)[use_ycenters],
+               c=res_std_ppm, alpha=0.25, label='x:False y:True', marker='*')
+
+    ax.scatter((aper_widths + 0.25 * use_xcenters)[~use_xcenters],
+               (aper_heights + 0.25 * use_ycenters)[~use_ycenters],
+               c=res_std_ppm[~use_xcenters], alpha=0.25,
+               label='x:False y:False', marker='^')
+
+    ax.legend(loc=0, fontsize=fontsize)
+'''
 
 
 def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
@@ -257,10 +273,6 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
                                use_ycenters_,
                                use_trace_angles_,
                                use_trace_lengths_)
-    if one_fig:
-        size = 100000
-    else:
-        size = 200
 
     out = ax.scatter(aper_widths[sub_sect], aper_heights[sub_sect],
                      c=focus_[sub_sect],
@@ -338,25 +350,30 @@ def plot_aper_grid_per_feature(ax, n_options, idx_split, use_xcenters,
 
         left, bottom, width, height = ax.get_position().bounds
         cbaxes = fig.add_axes([left + width, bottom, 0.025, height])
-        cb = plt.colorbar(out, cax=cbaxes)
+        _ = plt.colorbar(out, cax=cbaxes)
 
 
-def plot_aperture_edges_with_angle(planet, img_id=42, fontsize=40, axs=None):
-    image = planet.image_stack[img_id]
-    y_center = planet.trace_ycenters[img_id]
-    x_left = planet.x_left
-    x_right = planet.x_right
+def plot_aperture_edges_with_angle(instance, img_id=42, fontsize=40, axs=None):
+    image = instance.image_stack[img_id]
+    y_center = instance.trace_ycenters[img_id]
+    x_left = instance.x_left
+    x_right = instance.x_right
     trace_width = x_right - x_left
 
-    positions = np.transpose([planet.trace_xcenters, planet.trace_ycenters])
-    thetas = planet.trace_angles
+    positions = np.transpose(
+        [instance.trace_xcenters, instance.trace_ycenters])
+    thetas = instance.trace_angles
+
+    print(positions[img_id])
+    print(thetas[img_id])
 
     aper_tilt = RectangularAperture(
         positions[img_id], trace_width, 2, thetas[img_id])
+
     aper_flat = RectangularAperture(positions[img_id], trace_width, 2, 0)
 
     if axs is None:
-        fig, axs = plt.subplots(nrows=2, ncols=2)
+        _, axs = plt.subplots(nrows=2, ncols=2)
     else:
         for ax in axs.flatten():
             ax.clear()
@@ -433,37 +450,74 @@ def plot_aperture_edges_with_angle(planet, img_id=42, fontsize=40, axs=None):
     return axs
 
 
-def uniform_scatter_plot(planet, arr1, arr2, include_orbits=True,
-                         arr1_center=0, use_time_sort=True, size=200,
-                         title='', xlabel='', ylabel='', ms=15, fontsize=40,
-                         ann_fontsize=30, leg_fontsize=30, ax=None):
-    # https://stackoverflow.com/questions/45786714/custom-marker-edge-style-in-manual-legend
+def uniform_scatter_plot(instance, xarr, yarr, include_orbits=False,
+                         xarr_center=None, use_time_sort=True, size=200,
+                         n_sig=3, title='', xlabel='', ylabel='', ms=15, lw=2,
+                         fontsize=40, ann_fontsize=30, leg_fontsize=30,
+                         y_uncertainty=None, x_uncertainty=None,
+                         highlight_outliers=False, ax=None):
+
+    # https://stackoverflow.com/questions/45786714/
+    # custom-marker-edge-style-in-manual-legend
     # marker=u'$\u25CC$'
+
+    xarr_center = 0 if xarr_center is None else xarr_center
 
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
     if use_time_sort:
-        time_sort = np.argsort(planet.times)
+        _ = np.argsort(instance.times)
     else:
-        time_sort = np.arange(len(arr1))
+        _ = np.arange(len(xarr))
 
-    idx_orbit1 = np.arange(18)  # by eye
-    idx_orbit2 = np.arange(18, 37)  # by eye
-    idx_eclipse = np.arange(37, 56)  # by eye
-    idx_orbit4 = np.arange(56, len(arr1))  # by eye
-
-    ax.scatter(arr1[planet.idx_fwd] - arr1_center,
-               arr2[planet.idx_fwd], s=size,
+    ax.scatter(xarr[instance.idx_fwd] - xarr_center,
+               yarr[instance.idx_fwd], s=size,
                color=plasmas[0], label='Forward Scans')
 
-    ax.scatter(arr1[planet.idx_rev] - arr1_center,
-               arr2[planet.idx_rev], s=size,
+    ax.scatter(xarr[instance.idx_rev] - xarr_center,
+               yarr[instance.idx_rev], s=size,
                color=plasmas[2], label='Reverse Scans')
+
+    if x_uncertainty is not None:
+        assert(x_uncertainty.shape == xarr.shape),\
+            '`x_uncertainty` and `xarr` must have the same shape'
+
+        # for x, y, xunc in zip(xarr, yarr, x_uncertainty):
+        #     ax.plot([- xarr_center, x + xunc - xarr_center], [y] * 2)
+
+        for idx_ in instance.idx_fwd:
+            x = xarr[idx_] - xarr_center
+            y = yarr[idx_]
+            xunc = x_uncertainty[idx_]
+            ax.plot([x - xunc, x + xunc], [y] * 2, color=plasmas[0], lw=lw)
+
+        for idx_ in instance.idx_rev:
+            x = xarr[idx_] - xarr_center
+            y = yarr[idx_]
+            xunc = x_uncertainty[idx_]
+            ax.plot([x - xunc, x + xunc], [y] * 2, color=plasmas[2], lw=lw)
+
+    if y_uncertainty is not None:
+        assert(y_uncertainty.shape == xarr.shape),\
+            '`y_uncertainty` and `yarr` must have the same shape'
+
+        for idx_ in instance.idx_fwd:
+            x = xarr[idx_] - xarr_center
+            y = yarr[idx_]
+            yunc = y_uncertainty[idx_]
+
+            ax.plot([x] * 2, [y - yunc, y + yunc], color=plasmas[0], lw=lw)
+
+        for idx_ in instance.idx_rev:
+            x = xarr[idx_] - xarr_center
+            y = yarr[idx_]
+            yunc = y_uncertainty[idx_]
+            ax.plot([x] * 2, [y - yunc, y + yunc], color=plasmas[2], lw=lw)
 
     ax.set_title(title, fontsize=fontsize)
     ax.set_xlabel(xlabel, fontsize=fontsize)
@@ -474,51 +528,95 @@ def uniform_scatter_plot(planet, arr1, arr2, include_orbits=True,
     for tick in ax.yaxis.get_major_ticks():
         tick.label.set_fontsize(ann_fontsize)
 
-    if not include_orbits:
-        ax.legend(loc=0, fontsize=leg_fontsize)
-        return ax
+    # include_orbits = False  # FINDME: Needs to be fixed
+    if include_orbits:
+        ax = circle_orbits(instance.times, xarr, yarr, xarr_center, ax=ax)
 
-    # By hand values from looking at the light curve
-    ax.plot(arr1[time_sort][idx_orbit1] - arr1_center,
-            arr2[time_sort][idx_orbit1], 'o',
-            ms=25, mew=2, color='none', mec='black',
-            label='First Orbit', zorder=0, marker=u'$\u25CC$')
-
-    if include_orbits == 'only_the_first':
-        ax.legend(loc=0, fontsize=leg_fontsize)
-        return ax
-
-    ax.plot(arr1[time_sort][idx_orbit2] - arr1_center,
-            arr2[time_sort][idx_orbit2], 'o',
-            ms=20, mew=2, color='none', mec='lightgreen',
-            label='Second Orbit', zorder=0)  # , marker=u'$\u25CC$')
-
-    ax.plot(arr1[time_sort][idx_eclipse] - arr1_center,
-            arr2[time_sort][idx_eclipse], 'o',
-            ms=20, mew=2, color='none', mec='pink',
-            label='Third Orbit (eclipse)', zorder=0)  # , marker=u'$\u25CC$')
-
-    ax.plot(arr1[time_sort][idx_orbit4] - arr1_center,
-            arr2[time_sort][idx_orbit4], 'o',
-            ms=20, mew=2, color='none', mec='indigo',
-            label='Fourth Orbit', zorder=0)  # , marker=u'$\u25CC$')
+    if highlight_outliers:
+        ax = circle_outliers(xarr, yarr,
+                             instance.idx_fwd, instance.idx_rev,
+                             xarr_center, n_sig=n_sig, ax=ax)
 
     ax.legend(loc=0, fontsize=leg_fontsize)
+
     return ax
 
 
-def plot_center_position_vs_scan_and_orbit(planet, t0_base=0, size=200,
-                                           include_orbits=True, fontsize=40,
+def circle_outliers(xarr, yarr, idx_fwd=None, idx_rev=None,
+                    xarr_center=0, n_sig=3, ax=None):
+    if ax is None:
+        info_message('Creating `fig` and `ax`')
+        _, ax = plt.subplots()
+
+    if idx_fwd is None or idx_rev is None:
+        idx_fwd = np.arange(len(xarr))
+        idx_rev = []
+
+    outliers_fwd = sigma_clip(yarr[idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+    if idx_rev != []:
+        outliers_rev = sigma_clip(yarr[idx_rev],
+                                  sigma=n_sig,
+                                  maxiters=1,
+                                  stdfunc=mad_std).mask
+    else:
+        outliers_rev = []
+
+    ax.plot(xarr[idx_fwd][outliers_fwd] - xarr_center,
+            yarr[idx_fwd][outliers_fwd], 'o',
+            ms=25, mew=2, color='none',  mec='C0', marker=u'$\u25CC$')
+
+    ax.plot(xarr[idx_rev][outliers_rev] - xarr_center,
+            yarr[idx_rev][outliers_rev], 'o',
+            ms=25, mew=2, color='none',  mec='red', marker=u'$\u25CC$')
+
+    return ax
+
+
+def circle_orbits(times, xarr, yarr, xarr_center=0, ax=None):
+
+    if ax is None:
+        info_message('Creating `fig` and `ax`')
+        _, ax = plt.subplots()
+
+    n_times = len(times)
+    diff_times = np.diff(times)
+    idx_orbit_starts = np.where((diff_times > 10 * diff_times.mean()))[0] + 1
+    idx_orbit_starts = np.r_[[0], idx_orbit_starts]
+
+    last_length = [n_times - idx_orbit_starts[-1]]
+    orbit_lengths = np.r_[np.diff(idx_orbit_starts), last_length]
+
+    color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    color_cycle.extend(color_cycle)
+
+    gen_gen = enumerate(zip(idx_orbit_starts, orbit_lengths, color_cycle))
+    # for k, o_start in enumerate(idx_orbit_starts, color_cycle):
+    for k, (o_start, o_length, color_) in gen_gen:
+        idx_orbit = np.arange(o_start, o_start + o_length, dtype=int)
+        ax.plot(xarr[idx_orbit] - xarr_center,
+                yarr[idx_orbit], 'o',
+                ms=25, mew=2, color='none',  mec=color_)
+        # ,  # mec='black',
+        # label=f'Orbit {k}', zorder=0)  # , marker=u'$\u25CC$')
+
+    return ax
+
+
+def plot_center_position_vs_scan_and_orbit(instance, t0_base=0, size=200,
+                                           include_orbits=False, fontsize=40,
                                            ann_fontsize=30, leg_fontsize=30,
                                            ax=None):
     title = 'Center Positions of the Trace'
     xlabel = 'X-Center [pixels]'
     ylabel = 'Y-Center [pixels]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.trace_xcenters,
-                              planet.trace_ycenters,
-                              arr1_center=t0_base,
+    ax = uniform_scatter_plot(instance,
+                              instance.trace_xcenters,
+                              instance.trace_ycenters,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -530,21 +628,21 @@ def plot_center_position_vs_scan_and_orbit(planet, t0_base=0, size=200,
     return ax
 
 
-def plot_xcenter_position_vs_trace_length(planet, t0_base=0, size=200,
-                                          include_orbits=True, fontsize=40,
+def plot_xcenter_position_vs_trace_length(instance, t0_base=0, size=200,
+                                          include_orbits=False, fontsize=40,
                                           ann_fontsize=30, leg_fontsize=30,
                                           ax=None):
     title = 'X-Center vs Trace Lengths'
     xlabel = 'X-Center [pixels]'
     ylabel = 'Trace Lengths [pixels]'
 
-    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
-    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+    xcenters = instance.trace_xcenters - np.median(instance.trace_xcenters)
+    trace_lengths = instance.trace_lengths - np.median(instance.trace_lengths)
 
-    ax = uniform_scatter_plot(planet,
+    ax = uniform_scatter_plot(instance,
                               xcenters,
                               trace_lengths,
-                              arr1_center=t0_base,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -556,18 +654,18 @@ def plot_xcenter_position_vs_trace_length(planet, t0_base=0, size=200,
     return ax
 
 
-def plot_ycenter_vs_time(planet, t0_base=None, size=200,
-                         include_orbits=True, fontsize=40,
+def plot_ycenter_vs_time(instance, t0_base=None, size=200,
+                         include_orbits=False, fontsize=40,
                          ann_fontsize=30, leg_fontsize=30,
                          ax=None):
     title = 'Y-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Y-Center [pixels]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
-                              planet.trace_ycenters,
-                              arr1_center=t0_base,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
+                              instance.trace_ycenters,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -579,18 +677,18 @@ def plot_ycenter_vs_time(planet, t0_base=None, size=200,
     return ax
 
 
-def plot_xcenter_vs_time(planet, t0_base=None, size=200,
-                         include_orbits=True, fontsize=40,
+def plot_xcenter_vs_time(instance, t0_base=None, size=200,
+                         include_orbits=False, fontsize=40,
                          ann_fontsize=30, leg_fontsize=30,
                          ax=None):
     title = 'X-Positions vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'X-Center [pixels]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
-                              planet.trace_xcenters,
-                              arr1_center=t0_base,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
+                              instance.trace_xcenters,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -602,20 +700,20 @@ def plot_xcenter_vs_time(planet, t0_base=None, size=200,
     return ax
 
 
-def plot_trace_angle_vs_time(planet, nSig=0.5, size=200, t0_base=None,
-                             include_orbits=True, fontsize=40,
+def plot_trace_angle_vs_time(instance, nSig=0.5, size=200, t0_base=None,
+                             include_orbits=False, fontsize=40,
                              ann_fontsize=30, leg_fontsize=30,
                              ax=None):
     title = 'Trace Angle vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Trace Angle [degrees]'
 
-    trace_angles = planet.trace_angles * 180 / np.pi
+    trace_angles = instance.trace_angles * 180 / np.pi
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
                               trace_angles,
-                              arr1_center=t0_base,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -634,18 +732,18 @@ def plot_trace_angle_vs_time(planet, nSig=0.5, size=200, t0_base=None,
     return ax
 
 
-def plot_trace_length_vs_time(planet, t0_base=None, size=200,
-                              include_orbits=True, fontsize=40,
+def plot_trace_length_vs_time(instance, t0_base=None, size=200,
+                              include_orbits=False, fontsize=40,
                               ann_fontsize=30, leg_fontsize=30,
                               ax=None):
     title = 'Trace Lengths vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Trace Length [pixels]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
-                              planet.trace_lengths,
-                              arr1_center=t0_base,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
+                              instance.trace_lengths,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -657,9 +755,9 @@ def plot_trace_length_vs_time(planet, t0_base=None, size=200,
     return ax
 
 
-def plot_columwise_background_vs_time(planet,  # aper_width, aper_height,
+def plot_columwise_background_vs_time(instance,  # aper_width, aper_height,
                                       t0_base=None, size=200,
-                                      include_orbits=True, fontsize=40,
+                                      include_orbits=False, fontsize=40,
                                       ann_fontsize=30, leg_fontsize=30,
                                       ax=None):
 
@@ -669,13 +767,13 @@ def plot_columwise_background_vs_time(planet,  # aper_width, aper_height,
 
     # aper_column = f'aperture_sum_{aper_width}x{aper_height}'
 
-    sky_background = np.median(planet.sky_bg_columnwise, axis=1)
-    # sky_background = sky_background / planet.photometry_df[aper_column]
+    sky_background = np.median(instance.sky_bg_columnwise, axis=1)
+    # sky_background = sky_background / instance.photometry_df[aper_column]
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
                               sky_background,
-                              arr1_center=t0_base,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -687,18 +785,18 @@ def plot_columwise_background_vs_time(planet,  # aper_width, aper_height,
     return ax
 
 
-def plot_aperture_background_vs_time(planet, t0_base=None, size=200,
-                                     include_orbits=True, fontsize=40,
+def plot_aperture_background_vs_time(instance, t0_base=None, size=200,
+                                     include_orbits=False, fontsize=40,
                                      ann_fontsize=30, leg_fontsize=30,
                                      ax=None):
     title = 'Sky Background vs Time of the Trace'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Sky Background [electrons]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
-                              planet.sky_bgs,
-                              arr1_center=t0_base,
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
+                              instance.sky_bgs,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -710,16 +808,16 @@ def plot_aperture_background_vs_time(planet, t0_base=None, size=200,
     return ax
 
 
-def plot_ycenter_vs_flux(planet, aper_width, aper_height,
+def plot_ycenter_vs_flux(instance, aper_width, aper_height,
                          use_time_sort=False, nSig=0.5, size=200,
                          t0_base=0, ax=None, fontsize=40,
                          ann_fontsize=30, leg_fontsize=30,
-                         include_orbits=True):
+                         include_orbits=False):
 
     ppm = 1e6
 
     aper_column = f'aperture_sum_{aper_width}x{aper_height}'
-    fluxes = planet.normed_photometry_df[aper_column]
+    fluxes = instance.normed_photometry_df[aper_column]
 
     title = 'Flux vs Y-Center Positions'
     xlabel = 'Y-Center [pixels]'
@@ -731,10 +829,10 @@ def plot_ycenter_vs_flux(planet, aper_width, aper_height,
     min_flux, max_flux = np.percentile(fluxes, [0.01, 99.99])
     std_flux = fluxes[(fluxes >= min_flux) * (fluxes <= max_flux)].std()
 
-    ax = uniform_scatter_plot(planet,
-                              planet.trace_ycenters,
+    ax = uniform_scatter_plot(instance,
+                              instance.trace_ycenters,
                               fluxes,
-                              arr1_center=0,
+                              xarr_center=0,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -894,7 +992,7 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=90,
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -934,8 +1032,8 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=90,
     else:
         yhist, _ = np.histogram(edepths * ppm, bins=bins, density=True)
 
-        plt.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
-                         color='darkgrey')  # , alpha=kde_alpha)
+        ax.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
+                        color='darkgrey')  # , alpha=kde_alpha)
 
     last_perc = min_edepth
     for color_, perc_ in zip(plasmas, percentiles):
@@ -944,12 +1042,12 @@ def plot_kde_with_BCR_annotation(mcmc_samples_df, min_edepth=0, max_edepth=90,
 
         logprob_ = kde.score_samples(edepths_th_[:, None])
         kde_edepths_ = np.exp(logprob_)
-        plt.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
-                         color=color_, alpha=kde_alpha)
+        ax.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
+                        color=color_, alpha=kde_alpha)
 
         last_perc = perc_
 
-    # plt.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
+    # ax.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
     #                  label=f'{kernel.capitalize()} {lbl_base} KDE')
 
     # ax.axvline(edepths_mode, color=plasmas[2], ls='--', lw=lw)
@@ -1001,7 +1099,7 @@ def plot_kde_with_BCR_annotation_robust(
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
@@ -1040,8 +1138,8 @@ def plot_kde_with_BCR_annotation_robust(
     else:
         yhist, _ = np.histogram(edepths * ppm, bins=bins, density=True)
 
-        plt.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
-                         color='darkgrey')  # , alpha=kde_alpha)
+        ax.fill_between(edepths_th_real, 100 * kde_edepths_real_vals * 2,
+                        color='darkgrey')  # , alpha=kde_alpha)
 
     last_perc = min_edepth
     for color_, perc_ in zip(plasmas, percentiles):
@@ -1050,13 +1148,13 @@ def plot_kde_with_BCR_annotation_robust(
 
         logprob_ = kde.score_samples(edepths_th_[:, None])
         kde_edepths_ = np.exp(logprob_)
-        plt.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
-                         color=color_, alpha=kde_alpha)
+        ax.fill_between(edepths_th_, 100 * kde_edepths_ * 2,
+                        color=color_, alpha=kde_alpha)
 
         last_perc = perc_
 
-    plt.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
-                     label=f'{kernel.capitalize()} {lbl_base} KDE')
+    ax.fill_between([], [], color=plasmas[0], alpha=kde_alpha,
+                    label=f'{kernel.capitalize()} {lbl_base} KDE')
 
     ax.axvline(edepths_mode, color=plasmas[2], ls='--', lw=lw)
     annotation = f'{kernel.capitalize()} KDE Mode: {edepths_mode:0.0f} ppm'
@@ -1093,15 +1191,15 @@ def plot_kde_with_BCR_annotation_robust(
     return ax
 
 
-def plot_xcenter_vs_flux(planet, aper_width, aper_height,
+def plot_xcenter_vs_flux(instance, aper_width, aper_height,
                          use_time_sort=False, nSig=0.5, t0_base=0, size=200,
-                         include_orbits=True, fontsize=40,
+                         include_orbits=False, fontsize=40,
                          leg_fontsize=30, ax=None):
 
     ppm = 1e6
 
     aper_column = f'aperture_sum_{aper_width}x{aper_height}'
-    fluxes = planet.normed_photometry_df[aper_column]
+    fluxes = instance.normed_photometry_df[aper_column]
 
     title = 'Flux vs X-Center Positions'
     xlabel = 'X-Center [pixels]'
@@ -1113,10 +1211,10 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
     min_flux, max_flux = np.percentile(fluxes, [0.01, 99.99])
     std_flux = fluxes[(fluxes >= min_flux) * (fluxes <= max_flux)].std()
 
-    ax = uniform_scatter_plot(planet,
-                              planet.trace_xcenters,
+    ax = uniform_scatter_plot(instance,
+                              instance.trace_xcenters,
                               fluxes,
-                              arr1_center=0,
+                              xarr_center=0,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -1132,15 +1230,15 @@ def plot_xcenter_vs_flux(planet, aper_width, aper_height,
     return ax
 
 
-def plot_trace_lengths_vs_flux(planet, aper_width, aper_height,
+def plot_trace_lengths_vs_flux(instance, aper_width, aper_height,
                                use_time_sort=False, nSig=0.5, t0_base=0,
-                               size=200, include_orbits=True, fontsize=40,
+                               size=200, include_orbits=False, fontsize=40,
                                leg_fontsize=30, ax=None):
 
     ppm = 1e6
 
     aper_column = f'aperture_sum_{aper_width}x{aper_height}'
-    fluxes = planet.normed_photometry_df[aper_column]
+    fluxes = instance.normed_photometry_df[aper_column]
 
     title = 'Flux vs Trace Lengths'
     xlabel = 'Trace Lengths [pixels]'
@@ -1152,10 +1250,10 @@ def plot_trace_lengths_vs_flux(planet, aper_width, aper_height,
     min_flux, max_flux = np.percentile(fluxes, [0.01, 99.99])
     std_flux = fluxes[(fluxes >= min_flux) * (fluxes <= max_flux)].std()
 
-    ax = uniform_scatter_plot(planet,
-                              planet.trace_lengths,
+    ax = uniform_scatter_plot(instance,
+                              instance.trace_lengths,
                               fluxes,
-                              arr1_center=0,
+                              xarr_center=0,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
@@ -1171,7 +1269,7 @@ def plot_trace_lengths_vs_flux(planet, aper_width, aper_height,
     return ax
 
 
-def plot_best_aic_light_curve(planet, map_solns,
+def plot_best_aic_light_curve(instance, map_solns,
                               decor_results_df,  # mcmc_samples_df,
                               aic_apers,  keys_list,
                               aic_thresh=2, t0_base=0, fontsize=40,
@@ -1180,9 +1278,9 @@ def plot_best_aic_light_curve(planet, map_solns,
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    idx_fwd = planet.idx_fwd
-    idx_rev = planet.idx_rev
-    times = planet.times - t0_base
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times - t0_base
 
     aic_argmin = decor_results_df['aic_sub_min'].values.argmin()
     aic_min = decor_results_df['aic_sub_min'].iloc[aic_argmin]
@@ -1209,12 +1307,12 @@ def plot_best_aic_light_curve(planet, map_solns,
                                                    idx_fwd, idx_rev)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
-    phots = planet.normed_photometry_df[aper_column]
-    uncs = planet.normed_uncertainty_df[aper_column]
+    phots = instance.normed_photometry_df[aper_column]
+    uncs = instance.normed_uncertainty_df[aper_column]
 
     phots_corrected = (phots - line_model)
 
@@ -1261,7 +1359,7 @@ def plot_best_aic_light_curve(planet, map_solns,
     use_trace_angles_vals = decor_results_df['trace_angles'].values
     use_trace_lengths_vals = decor_results_df['trace_lengths'].values
 
-    for aper_column in tqdm(planet.normed_photometry_df.columns):
+    for aper_column in tqdm(instance.normed_photometry_df.columns):
         if 'aperture_sum_' not in aper_column:
             continue
 
@@ -1277,8 +1375,8 @@ def plot_best_aic_light_curve(planet, map_solns,
             use_trace_angles = entry[3]
             use_trace_lengths = entry[4]
 
-            phots = planet.normed_photometry_df[aper_column]
-            uncs = planet.normed_uncertainty_df[aper_column]
+            phots = instance.normed_photometry_df[aper_column]
+            uncs = instance.normed_uncertainty_df[aper_column]
 
             map_soln_key = (f'aper_column:{aper_column}-'
                             f'idx_split:{idx_split}-'
@@ -1345,7 +1443,7 @@ def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
     else:
         edepth = np.sqrt(mcmc_params['edepth'])
 
-    # Set up a Keplerian orbit for the planets
+    # Set up a Keplerian orbit for the instances
     orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
 
     # # Compute the model light curve using starry
@@ -1355,27 +1453,61 @@ def compute_line_and_eclipse_models(mcmc_params, times, t0, u, period, b,
     return eclipse_model, line_model
 
 
-def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
+def find_data_for_figure4(instance, mcmc_params, eclipse_depths,
+                          instance_params, aper_column,
+                          n_pts_th=int(1e5), t0_base=0):
+    # To Send to ApJ
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times
+    times_th = np.linspace(times.min(), times.max(), n_pts_th)
+
+    period = instance_params.orbital_period
+    t0 = t0_base
+    b = instance_params.impact_parameter
+    u = [0]
+
+    xcenters = instance.trace_xcenters - np.median(instance.trace_xcenters)
+    ycenters = instance.trace_ycenters - np.median(instance.trace_ycenters)
+    trace_angles = instance.trace_angles - np.median(instance.trace_angles)
+    trace_lengths = instance.trace_lengths - np.median(instance.trace_lengths)
+
+    _, line_model = compute_line_and_eclipse_models(
+        mcmc_params, times, t0, u, period, b,
+        xcenters=xcenters, ycenters=ycenters,
+        trace_angles=trace_angles, trace_lengths=trace_lengths,
+        times_th=times_th, eclipse_depth=None)
+
+    phots = instance.normed_photometry_df[aper_column].values.copy()
+    uncs = instance.normed_uncertainty_df[aper_column].values.copy()
+
+    # phots_corrected = (phots - line_model)
+    df = pd.DataFrame(np.transpose([times, phots, uncs, line_model]),
+                      columns=['times_mjd', 'phots', 'phot_uncs', 'systematics'])
+    return df
+
+
+def plot_set_of_models(instance, mcmc_params, eclipse_depths, instance_params,
                        aper_column, n_pts_th=int(1e5), t0_base=0,
                        limb_dark=[0], plot_raw=False, ax=None,
                        fontsize=40, leg_fontsize=25, include_null=False):
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    idx_fwd = planet.idx_fwd
-    idx_rev = planet.idx_rev
-    times = planet.times
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times
     times_th = np.linspace(times.min(), times.max(), n_pts_th)
 
-    period = planet_params.orbital_period
+    period = instance_params.orbital_period
     t0 = t0_base
-    b = planet_params.impact_parameter
+    b = instance_params.impact_parameter
     u = limb_dark
 
-    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
-    ycenters = planet.trace_ycenters - np.median(planet.trace_ycenters)
-    trace_angles = planet.trace_angles - np.median(planet.trace_angles)
-    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+    xcenters = instance.trace_xcenters - np.median(instance.trace_xcenters)
+    ycenters = instance.trace_ycenters - np.median(instance.trace_ycenters)
+    trace_angles = instance.trace_angles - np.median(instance.trace_angles)
+    trace_lengths = instance.trace_lengths - np.median(instance.trace_lengths)
 
     eclipse_model, line_model = compute_line_and_eclipse_models(
         mcmc_params, times, t0, u, period, b,
@@ -1384,15 +1516,16 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
         times_th=times_th, eclipse_depth=None)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
-    phots = planet.normed_photometry_df[aper_column].values.copy()
-    uncs = planet.normed_uncertainty_df[aper_column].values.copy()
+    phots = instance.normed_photometry_df[aper_column].values.copy()
+    uncs = instance.normed_uncertainty_df[aper_column].values.copy()
 
     # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
     # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
     phots_corrected = (phots - line_model)
+
     min_corrected = (phots_corrected.min() - 1.1 * np.max(uncs)) * ppm
     max_corrected = (phots_corrected.max() + 1.1 * np.max(uncs)) * ppm
 
@@ -1469,8 +1602,8 @@ def plot_set_of_models(planet, mcmc_params, eclipse_depths, planet_params,
     return ax
 
 
-def plot_predictions_with_wasp43(
-        planet, mcmc_params, eclipse_depths, planet_params,
+def plot_predictions_with_planet(
+        instance, mcmc_params, eclipse_depths, instance_params,
         aper_column, n_pts_th=int(1e5), t0_base=0,
         min_yscale=1.4, max_yscale=1.4, error_scale=1.0,
         base_ppm=124, limb_dark=[0], plot_raw=False, xlims=[-0.1, 0.1],
@@ -1479,20 +1612,20 @@ def plot_predictions_with_wasp43(
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    idx_fwd = planet.idx_fwd
-    idx_rev = planet.idx_rev
-    times = planet.times
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times
     times_th = np.linspace(times.min(), times.max() + 0.1, n_pts_th)
 
-    period = planet_params.orbital_period
+    period = instance_params.orbital_period
     t0 = t0_base
-    b = planet_params.impact_parameter
+    b = instance_params.impact_parameter
     u = limb_dark
 
-    xcenters = planet.trace_xcenters - np.median(planet.trace_xcenters)
-    ycenters = planet.trace_ycenters - np.median(planet.trace_ycenters)
-    trace_angles = planet.trace_angles - np.median(planet.trace_angles)
-    trace_lengths = planet.trace_lengths - np.median(planet.trace_lengths)
+    xcenters = instance.trace_xcenters - np.median(instance.trace_xcenters)
+    ycenters = instance.trace_ycenters - np.median(instance.trace_ycenters)
+    trace_angles = instance.trace_angles - np.median(instance.trace_angles)
+    trace_lengths = instance.trace_lengths - np.median(instance.trace_lengths)
 
     eclipse_model, line_model = compute_line_and_eclipse_models(
         mcmc_params, times, t0, u, period, b,
@@ -1501,11 +1634,11 @@ def plot_predictions_with_wasp43(
         times_th=times_th, eclipse_depth=None)
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
-    phots = planet.normed_photometry_df[aper_column].values.copy()
-    uncs = planet.normed_uncertainty_df[aper_column].values.copy()
+    phots = instance.normed_photometry_df[aper_column].values.copy()
+    uncs = instance.normed_uncertainty_df[aper_column].values.copy()
 
     # phots[idx_fwd] = phots[idx_fwd] - np.median(phots[idx_fwd])
     # phots[idx_rev] = phots[idx_rev] - np.median(phots[idx_rev])
@@ -1572,26 +1705,26 @@ def plot_predictions_with_wasp43(
     return ax
 
 
-def plot_raw_light_curve(planet, aper_width, aper_height,
+def plot_raw_light_curve(instance, aper_width, aper_height,
                          lw=3, fontsize=40, leg_fontsize=30,
                          t0_base=0, ax=None
                          ):
     ppm = 1e6
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    idx_fwd = planet.idx_fwd
-    idx_rev = planet.idx_rev
-    times = planet.times - t0_base
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
+    times = instance.times - t0_base
 
     aper_column = f'aperture_sum_{aper_width}x{aper_height}'
 
     if ax is None:
-        fig, ax = plt.subplots()
+        _, ax = plt.subplots()
 
     ax.clear()
 
-    phots = planet.normed_photometry_df[aper_column]
-    uncs = planet.normed_uncertainty_df[aper_column]
+    phots = instance.normed_photometry_df[aper_column]
+    uncs = instance.normed_uncertainty_df[aper_column]
 
     phots_med = np.median(phots)
     phots_med_sub = phots - phots_med
@@ -1623,33 +1756,139 @@ def plot_raw_light_curve(planet, aper_width, aper_height,
     return ax
 
 
-def plot_lightcurve(planet, aper_width, aper_height,
+def plot_lightcurve(instance, aper_width, aper_height,
                     size=200, fontsize=40, leg_fontsize=30,
-                    t0_base=None, include_orbits=True):
+                    t0_base=None, n_sig=3,
+                    include_orbits=False,
+                    highlight_outliers=False,
+                    include_uncertainties=False,
+                    use_stat_ylim=False,
+                    ax=None):
 
-    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
-    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
-    fluxes = fluxes / np.median(fluxes)
+    instance_dict = instance.__dict__.copy()
 
-    min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
-    # info_message(f'Fluxes Scatter: {np.std(fluxes)*1e6:0.0f} ppm')
+    aper_colname = f'aperture_sum_{aper_width}x{aper_height}'
+    fluxes = instance.normed_photometry_df[aper_colname]
+
+    if use_stat_ylim:
+        inliers_fwd_, inliers_rev_ = compute_inliers(instance, aper_colname)
+        med_fwd_ = np.median(fluxes[inliers_fwd_])
+        med_rev_ = np.median(fluxes[inliers_rev_])
+        std_rev_ = mad_std(fluxes[inliers_rev_])
+        std_fwd_ = mad_std(fluxes[inliers_fwd_])
+        med_flux = np.mean([med_fwd_, med_rev_])
+        std_flux = np.mean([std_fwd_, std_rev_])
+        min_flux = med_flux - (n_sig + 1) * std_flux
+        max_flux = med_flux + (n_sig + 1) * std_flux
+    else:
+        min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
+
     title = 'Flux vs Time [days]'
     xlabel = 'Time Since Mean Time [days]'
     ylabel = 'Flux [ppm]'
 
-    ax = uniform_scatter_plot(planet,
-                              planet.times,
+    x_uncertainty = None
+    y_uncertainty = None
+    if include_uncertainties:
+        ppm = 1e6
+        y_uncertainty = instance.normed_uncertainty_df[aper_colname]
+
+    ax = uniform_scatter_plot(instance,
+                              instance.times,
                               fluxes,
-                              arr1_center=t0_base,
+                              xarr_center=t0_base,
                               title=title,
                               xlabel=xlabel,
                               ylabel=ylabel,
                               size=size,
+                              n_sig=n_sig,
                               include_orbits=include_orbits,
+                              highlight_outliers=highlight_outliers,
                               fontsize=fontsize,
+                              x_uncertainty=x_uncertainty,
+                              y_uncertainty=y_uncertainty,
                               ax=ax)
 
-    plt.ylim(min_flux, max_flux)
+    delta_ylim = (max_flux - min_flux) * 0.05  # 5% above and below the max/min
+    ax.set_ylim(min_flux - delta_ylim, max_flux + delta_ylim)
+
+    instance.__dict__ = instance_dict.copy()
+    return ax
+
+
+def segment_by_orbit(instance):
+    n_times = len(instance.times)
+    diff_times = np.diff(instance.times)
+    idx_orbit_starts = np.where((diff_times > 10 * diff_times.mean()))[0] + 1
+    idx_orbit_starts = np.r_[[0], idx_orbit_starts]
+
+    last_length = [n_times - idx_orbit_starts[-1]]
+    orbit_lengths = np.r_[np.diff(idx_orbit_starts), last_length]
+
+    orbit_orders = []
+    for ostart, olength in zip(idx_orbit_starts, orbit_lengths):
+        orbit_orders.append(np.arange(ostart, ostart + olength).astype(int))
+
+    return orbit_orders
+
+
+def plot_lightcurve_orbit(instance, aper_width, aper_height,
+                          size=200, fontsize=40, leg_fontsize=30,
+                          t0_base=None, n_sig=3,
+                          include_orbits=False,
+                          highlight_outliers=False,
+                          include_uncertainties=False,
+                          reduce_rev_fwd_distance=False,
+                          ax=None):
+
+    aper_colname = f'aperture_sum_{aper_width}x{aper_height}'
+    fluxes = instance.normed_photometry_df[aper_colname].values.copy()
+    idx_fwd = instance.idx_fwd.copy()
+    idx_rev = instance.idx_rev.copy()
+    times = instance.times.copy()
+
+    if reduce_rev_fwd_distance:
+        flux_fwd = fluxes[idx_fwd].copy()
+        flux_rev = fluxes[idx_rev].copy()
+        fluxes[instance.idx_fwd] = flux_fwd / np.median(flux_fwd)
+        fluxes[instance.idx_rev] = flux_rev / np.median(flux_rev)
+
+    min_flux, max_flux = np.percentile(fluxes, [0.1, 99.9])
+    title = 'Flux vs Time [minutes]'
+    xlabel = 'Time Since Orbit Start [minutes]'
+    ylabel = 'Flux [ppm]'
+
+    x_uncertainty = None
+    y_uncertainty = None
+    if include_uncertainties:
+        ppm = 1e6
+        y_uncertainty = instance.normed_uncertainty_df[aper_colname]
+        y_uncertainty = y_uncertainty.values.copy()
+
+    segments = segment_by_orbit(instance)
+    xarr = []
+    for seg_ in segments:
+        xarr.extend(times[seg_] - times[seg_].min())
+
+    day2min = 1440
+    ax = uniform_scatter_plot(instance,
+                              np.array(xarr) * day2min,
+                              fluxes,
+                              xarr_center=t0_base,
+                              title=title,
+                              xlabel=xlabel,
+                              ylabel=ylabel,
+                              size=size,
+                              n_sig=n_sig,
+                              include_orbits=include_orbits,
+                              highlight_outliers=highlight_outliers,
+                              fontsize=fontsize,
+                              x_uncertainty=x_uncertainty,
+                              y_uncertainty=y_uncertainty,
+                              ax=ax)
+
+    delta_ylim = (max_flux - min_flux) * 0.05  # 5% above and below the max/min
+    ax.set_ylim(min_flux - delta_ylim, max_flux + delta_ylim)
 
     return ax
 
@@ -1682,15 +1921,15 @@ def add_arrows(n_pixels, x, y, dx, dy, ax,
 
     x_0 = x + 8 if rotate else x + 110
     y_0 = y + 110 if rotate else y + 12
-    plt.arrow(x_0, y_0, dx, dy,
-              head_width=max_head_width, head_length=max_head_length,
-              color=color, lw=5, )
+    ax.arrow(x_0, y_0, dx, dy,
+             head_width=max_head_width, head_length=max_head_length,
+             color=color, lw=5, )
 
     x_1 = x + 8 if rotate else x - 10
     y_1 = y - 10 if rotate else y + 10
-    plt.arrow(x_1, y_1, -dx, -dy,
-              head_width=max_head_width, head_length=max_head_length,
-              color=color, lw=5)
+    ax.arrow(x_1, y_1, -dx, -dy,
+             head_width=max_head_width, head_length=max_head_length,
+             color=color, lw=5)
 
     return ax
 
@@ -1707,7 +1946,7 @@ def plot_apertures(image, aperture,
     else:
         fig, ax = plt.subplots()
 
-    plt.imshow(image, norm=norm, origin='lower')
+    ax.imshow(image, norm=norm, origin='lower')
 
     aperture.plot(color='white', lw=lw, ax=ax)
 
@@ -1717,7 +1956,7 @@ def plot_apertures(image, aperture,
     if outer_annular is not None:
         outer_annular.plot(color='yellow', lw=lw, ax=ax)
 
-    plt.axis('off')
+    ax.axis('off')
     plt.subplots_adjust(
         top=1,
         bottom=0,
@@ -1812,35 +2051,35 @@ def plot_apertures(image, aperture,
     return ax
 
 
-def plot_trace_peaks(planet, image_id):
+def plot_trace_peaks(instance, image_id):
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    image = planet.image_stack[image_id]
+    image = instance.image_stack[image_id]
     image_shape = image.shape
     gauss_means = np.zeros(image_shape[1])
-    for key, val in planet.center_traces[image_id].items():
+    for key, val in instance.center_traces[image_id].items():
         gauss_means[key] = val['results'].mean.value
 
     norm = simple_norm(image, 'sqrt', percent=99)
-    plt.imshow(image, norm=norm)
-    plt.plot(np.arange(image_shape[1]), gauss_means,
-             'o', color=plasmas[2], ms=1)
+    ax.imshow(image, norm=norm)
+    ax.plot(np.arange(image_shape[1]), gauss_means,
+            'o', color=plasmas[2], ms=1)
 
-    plt.xlim(0, image_shape[1])
-    plt.ylim(0, image_shape[0])
+    ax.set_xlim(0, image_shape[1])
+    ax.set_ylim(0, image_shape[0])
     plt.tight_layout()
-    plt.axis('off')
+    ax.axis('off')
     plt.waitforbuttonpress()
 
 
-def plot_errorbars(planet, id_=None):
+def plot_errorbars(instance, id_=None):
     plasmas = ('#4c02a1', '#cc4778', '#fdc527')
 
-    id_ = list(planet.fluxes['apertures'].keys())[0] if id_ is None else id_
+    id_ = list(instance.fluxes['apertures'].keys())[0] if id_ is None else id_
 
-    fluxes_ = planet.fluxes['fluxes'][id_]
-    fwd_fluxes_ = fluxes_[planet.idx_fwd]
-    rev_fluxes_ = fluxes_[planet.idx_rev]
+    fluxes_ = instance.fluxes['fluxes'][id_]
+    fwd_fluxes_ = fluxes_[instance.idx_fwd]
+    rev_fluxes_ = fluxes_[instance.idx_rev]
 
     med_flux = np.median(fluxes_)
     fwd_scatter = np.std(fwd_fluxes_ / np.median(fwd_fluxes_)) * 1e6
@@ -1854,50 +2093,50 @@ def plot_errorbars(planet, id_=None):
     fluxes_normed = fluxes_ / med_flux
     errors_normed = np.sqrt(fluxes_) / med_flux
 
-    plt.errorbar(planet.times[planet.idx_fwd],
-                 fluxes_normed[planet.idx_fwd],
-                 errors_normed[planet.idx_fwd],
-                 fmt='o', color=plasmas[0])
+    ax.errorbar(instance.times[instance.idx_fwd],
+                fluxes_normed[instance.idx_fwd],
+                errors_normed[instance.idx_fwd],
+                fmt='o', color=plasmas[0])
 
-    plt.errorbar(planet.times[planet.idx_rev],
-                 fluxes_normed[planet.idx_rev],
-                 errors_normed[planet.idx_rev],
-                 fmt='o', color='C3')
+    ax.errorbar(instance.times[instance.idx_rev],
+                fluxes_normed[instance.idx_rev],
+                errors_normed[instance.idx_rev],
+                fmt='o', color='C3')
 
-    plt.axhline(1.0, ls='--', color='C2')
-    plt.title('WASP-43 HST/UVIS Observation Initial Draft Photometry')
-    plt.xlabel('Time [MJD]')
-    plt.ylabel('Normalized Flux')
+    ax.axhline(1.0, ls='--', color='C2')
+    ax.set_title('WASP-43 HST/UVIS Observation Initial Draft Photometry')
+    ax.set_xlabel('Time [MJD]')
+    ax.set_ylabel('Normalized Flux')
 
-    plt.annotate(fwd_annotate,
-                 (0, 0),
-                 xycoords='axes fraction',
-                 xytext=(5, 5),
-                 textcoords='offset points',
-                 ha='left',
-                 va='bottom',
-                 fontsize=12,
-                 color=plasmas[0],
-                 weight='bold')
+    ax.annotate(fwd_annotate,
+                (0, 0),
+                xycoords='axes fraction',
+                xytext=(5, 5),
+                textcoords='offset points',
+                ha='left',
+                va='bottom',
+                fontsize=12,
+                color=plasmas[0],
+                weight='bold')
 
-    plt.annotate(rev_annotate,
-                 (0, 0.025),
-                 xycoords='axes fraction',
-                 xytext=(5, 5),
-                 textcoords='offset points',
-                 ha='left',
-                 va='bottom',
-                 fontsize=12,
-                 color='C3',
-                 weight='bold')
+    ax.annotate(rev_annotate,
+                (0, 0.025),
+                xycoords='axes fraction',
+                xytext=(5, 5),
+                textcoords='offset points',
+                ha='left',
+                va='bottom',
+                fontsize=12,
+                color='C3',
+                weight='bold')
 
     plt.tight_layout()
     plt.show()
 
 
 def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
-    # existing_phot_df = planet_savedict_backup_221019['photometry_df']
-    # existing_phot_df = planet.photometry_df.copy()
+    # existing_phot_df = instance_savedict_backup_221019['photometry_df']
+    # existing_phot_df = instance.photometry_df.copy()
 
     aperture_columns = [colname
                         for colname in existing_phot_df.columns
@@ -1942,33 +2181,60 @@ def convert_photometry_df_columns_standard(existing_phot_df, trace_lengths):
     return photometry_df
 
 
-def plot_2D_stddev(planet, signal_max=235):
+def compute_light_curve_rms(phots, idx_fwd, idx_rev, n_sig=3,
+                            difference=False, return_ratio=False):
     ppm = 1e6
-    photometry_df = planet.photometry_df
+    inliers_fwd = ~sigma_clip(phots[idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+    inliers_rev = ~sigma_clip(phots[idx_rev],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+    phots_fwd = phots[idx_fwd][inliers_fwd].copy()
+    phots_rev = phots[idx_rev][inliers_rev].copy()
+
+    if difference:
+        phots_fwd = np.diff(phots_fwd)
+        phots_rev = np.diff(phots_rev)
+    lc_std_rev = phots_rev.std()
+    lc_std_fwd = phots_fwd.std()
+
+    lc_med_rev = np.median(phots_rev)
+    lc_med_fwd = np.median(phots_fwd)
+
+    lc_std = np.mean([lc_std_rev, lc_std_fwd])
+    lc_med = np.mean([lc_med_rev, lc_med_fwd])
+
+    if return_ratio:
+        return lc_std / lc_med * ppm
+
+    return lc_std, lc_med
+
+
+def plot_2D_stddev(instance, signal_max=500, fontsize=20,
+                   n_sig=3, reject_outliers=True, difference=False,
+                   axs=None):
+
+    if axs is None:
+        fig, ax = plt.subplots()
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='2%', pad=0.05)
+        axs = ax, cax
+    else:
+        ax, cax = axs
+        ax.clear()
+        cax.clear()
+
+    ppm = 1e6
+    photometry_df = instance.photometry_df
+    idx_fwd = instance.idx_fwd
+    idx_rev = instance.idx_rev
 
     phot_columns = [colname
                     for colname in photometry_df.columns
                     if 'aperture_sum' in colname]
-
-    new_standard = True
-    for colname in phot_columns:
-        if 'x' not in colname:
-            new_standard = False
-
-    if not new_standard:
-        warning_message(
-            'Converting Photomery Format from '
-            '`aperture_sum_0` to aperture_sum_{width}x{heights}\n'
-            'Run `convert_photometry_df_columns_standard` to make '
-            'this permanent')
-
-        photometry_df = convert_photometry_df_columns_standard(
-            photometry_df, planet.trace_lengths)
-        phot_columns = [colname
-                        for colname in photometry_df.columns
-                        if 'aperture_sum' in colname]
-
-    info_message(f'\n{photometry_df}')
 
     aper_heights = np.zeros(len(phot_columns), dtype=int)
     aper_widths = np.zeros(len(phot_columns), dtype=int)
@@ -1987,18 +2253,27 @@ def plot_2D_stddev(planet, signal_max=235):
 
     meshgrid = np.meshgrid(aper_widths, aper_heights)
 
-    phot_vals = photometry_df[phot_columns].values
-    lc_std_rev = phot_vals[planet.idx_rev].std(axis=0)
-    lc_std_fwd = phot_vals[planet.idx_fwd].std(axis=0)
+    phot_vals = photometry_df[phot_columns]
 
-    lc_med_rev = np.median(phot_vals[planet.idx_rev], axis=0)
-    lc_med_fwd = np.median(phot_vals[planet.idx_rev], axis=0)
-
-    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
-    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
+    lc_std = np.zeros(phot_vals.shape[-1])
+    lc_med = np.zeros(phot_vals.shape[-1])
+    for k, colname in enumerate(phot_columns):
+        lc_std_, lc_med_ = compute_light_curve_rms(phots=phot_vals[colname],
+                                                   idx_fwd=instance.idx_fwd,
+                                                   idx_rev=instance.idx_rev,
+                                                   n_sig=n_sig,
+                                                   difference=difference)
+        lc_std[k] = lc_std_
+        lc_med[k] = lc_med_
 
     signal = lc_std / lc_med * ppm
+
     good = signal < signal_max  # ppm
+    if not np.any(good):
+        info_message('No `good` indices found: try increasing `signal_max`')
+        return
+
+    # good = np.ones_like(signal, dtype=bool)
     sig_min, sig_max = np.percentile(signal[good], [0.1, 99.9])
 
     max_widths = np.max(meshgrid[0].ravel()[good])
@@ -2012,32 +2287,132 @@ def plot_2D_stddev(planet, signal_max=235):
     height_best = meshgrid[1].ravel()[idx_best]
     best_ppm = signal[idx_best]
 
-    plt.scatter(meshgrid[0].ravel()[good], meshgrid[1].ravel()[
-                good], c=(lc_std / lc_med)[good] * ppm, marker='s', s=1260)
+    scat = ax.scatter(meshgrid[0].ravel()[good], meshgrid[1].ravel()[
+        good], c=(lc_std / lc_med)[good] * ppm, marker='s', s=800)
 
-    cbar = plt.colorbar()
+    fig = plt.gcf()
+    cbar = fig.colorbar(scat, cax=cax, orientation='vertical')
+
+    # cbar = plt.colorbar()
     # cbar.ax.set_yticklabels()
     cbar.set_label('Raw Light Curve Std-Dev [ppm]', rotation=270)
-    cbar.ax.get_yaxis().labelpad = 30
+    cax.get_yaxis().labelpad = 30
 
-    plt.plot(width_best, height_best, 'o', color='C1', ms=10)
-    plt.annotate(f'{best_ppm:.0f} ppm [{width_best}x{height_best}]',
-                 (width_best + 1, height_best + 1),
-                 # xycoords='axes fraction',
-                 xytext=(width_best + 1, height_best + 1),
-                 # textcoords='offset points',
-                 ha='left',
-                 va='bottom',
-                 fontsize=fontsize // 2,
-                 color='C1',
-                 weight='bold')
+    ax.plot(width_best, height_best, 'o', color='C1', ms=10)
+    ax.annotate(f'{best_ppm:.0f} ppm [{width_best}x{height_best}]',
+                (width_best + 1, height_best + 1),
+                # xycoords='axes fraction',
+                xytext=(width_best + 1, height_best + 1),
+                # textcoords='offset points',
+                ha='left',
+                va='bottom',
+                fontsize=fontsize // 2,
+                color='C1',
+                weight='bold')
 
-    plt.xlabel('Aperture Width Outside Trace', fontsize=fontsize)
-    plt.ylabel('Aperture Height Above Trace', fontsize=fontsize)
+    ax.set_xlabel('Aperture Width Outside Trace', fontsize=fontsize)
+    ax.set_ylabel('Aperture Height Above Trace', fontsize=fontsize)
 
-    plt.xlim(min_widths - 2, max_widths + 2)
-    plt.ylim(min_height - 5, max_height + 5)
+    ax.set_xlim(min_widths - 2, max_widths + 2)
+    ax.set_ylim(min_height - 5, max_height + 5)
 
-    plt.title(
+    ax.set_title(
         'Raw Lightcurve Normalized Std-Dev over Height x Width of Aperture',
         fontsize=fontsize)
+
+    plt.subplots_adjust(
+        top=0.954,
+        bottom=0.073,
+        left=0.046,
+        right=0.95,
+        hspace=0.2,
+        wspace=0.2
+    )
+
+    return axs
+
+
+def plot_trace_over_time(instance, metric=np.sum, delta_y=50,
+                         ax=None, adjust_xloc=False, over_time=False,
+                         focus_xrange=False, outliers_rev=None,
+                         outliers_fwd=None):
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.clear()
+
+    n_times, n_rows, n_cols = instance.image_stack.shape
+    trace_metric = np.zeros((n_times, n_cols))
+    for k, yc in enumerate(instance.trace_ycenters):
+        ymin = np.round(yc - delta_y).astype(int)
+        ymax = np.round(yc + delta_y).astype(int)
+        trace_metric[k] = metric(instance.image_stack[k][ymin:ymax], axis=0)
+
+    # trace_metric = metric(instance.image_stack, axis=1)
+    yinds, xinds = np.indices(trace_metric.shape)
+    ymax, xmax = trace_metric.shape
+
+    if over_time:
+        yinds = np.ones_like(yinds)
+        yinds = (yinds.T * instance.times).T
+
+    if adjust_xloc:
+        xc_med = np.median(instance.trace_xcenters)
+        delta_x = xc_med - instance.trace_xcenters
+    else:
+        delta_x = np.zeros_like(instance.times)
+
+    # ax.pcolor((trace_metric / trace_metric.mean(axis=0)),
+    #           vmin=0.95, vmax=1.05)
+
+    ax.scatter(x=xinds + delta_x[:, None],
+               y=yinds,
+               c=(trace_metric / trace_metric.mean(axis=0)),
+               vmin=0.95, vmax=1.05, marker='s', s=3)
+
+    if over_time:
+        x_rng = instance.times
+    else:
+        x_rng = np.arange(instance.times.size)
+
+    ax.scatter(instance.trace_mins + delta_x, x_rng, c='red', marker='x')
+    ax.scatter(instance.trace_maxs + delta_x, x_rng, c='red', marker='x')
+    ax.scatter(instance.trace_xcenters + delta_x, x_rng, c='red', marker='x')
+
+    if outliers_rev is not None:
+        ax.scatter((instance.trace_mins + delta_x)[outliers_rev],
+                   x_rng[outliers_rev], c='green', marker='o')
+        ax.scatter((instance.trace_maxs + delta_x)[outliers_rev],
+                   x_rng[outliers_rev], c='green', marker='o')
+        ax.scatter((instance.trace_xcenters + delta_x)[outliers_rev],
+                   x_rng[outliers_rev],
+                   c='green', marker='o')
+
+    if outliers_fwd is not None:
+        ax.scatter((instance.trace_mins + delta_x)[outliers_fwd],
+                   x_rng[outliers_fwd], c='green', marker='o')
+        ax.scatter((instance.trace_maxs + delta_x)[outliers_fwd],
+                   x_rng[outliers_fwd], c='green', marker='o')
+        ax.scatter((instance.trace_xcenters + delta_x)[outliers_fwd],
+                   x_rng[outliers_fwd],
+                   c='green', marker='o')
+
+    if adjust_xloc:
+        ax.axvline(xc_med, lw=1, color='k')
+
+    if focus_xrange:
+        xmin = np.median(instance.trace_mins)
+        xmax = np.median(instance.trace_maxs)
+    else:
+        xmin = 0
+
+    ax.set_xlim(xmin, xmax)
+
+    if not over_time:
+        ax.set_ylim(0, ymax)
+
+    ax.axis('off')
+
+    plt.subplots_adjust(hspace=0, wspace=0, top=1, left=0, right=1, bottom=0)
+
+    return ax

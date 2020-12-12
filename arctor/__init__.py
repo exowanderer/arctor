@@ -1,5 +1,5 @@
 from . import *
-from .arctor import *
+from .arctor import Arctor
 from .utils import *
 from .dwt import *
 

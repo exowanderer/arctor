@@ -1,7 +1,7 @@
 from . import *
 from .arctor import *
+# from . import Arctor
 
-import astropy.units as units
 import exoplanet as xo
 import numpy as np
 import os
@@ -11,6 +11,13 @@ import starry
 import theano.tensor as tt
 
 from statsmodels.robust.scale import mad
+
+from astropy.io import fits
+from astropy.stats import mad_std, sigma_clip
+from astropy.time import Time
+from astropy import units
+
+from tqdm import tqdm
 
 
 def debug_message(message, end='\n'):
@@ -25,32 +32,46 @@ def info_message(message, end='\n'):
     print(f'[INFO] {message}', end=end)
 
 
-def get_flux_idx_from_df(planet, aper_width, aper_height):
-    # There *must* be a faster way!
-    aperwidth_columns = [colname
-                         for colname in planet.photometry_df.columns
-                         if 'aper_width' in colname]
+def create_raw_lc_stddev(planet):
+    ppm = 1e6
+    phot_vals = planet.photometry_df
+    lc_std_rev = phot_vals.iloc[planet.idx_rev].std(axis=0)
+    lc_std_fwd = phot_vals.iloc[planet.idx_fwd].std(axis=0)
 
-    aperheight_columns = [colname
-                          for colname in planet.photometry_df.columns
-                          if 'aper_height' in colname]
+    lc_med_rev = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
+    lc_med_fwd = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
 
-    trace_length = np.median(planet.trace_lengths) - 0.1
+    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
+    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
 
-    aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
-    aperwidths_df = aperwidths_df.astype(int)
+    return lc_std / lc_med * ppm
 
-    aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
-    aperwidth_flag = aperwidths_df.values[0] == aper_width
-    aperheight_flag = aperheight_df.values[0] == aper_height
 
-    return np.where(aperwidth_flag * aperheight_flag)  # [0][0]
+# def get_flux_idx_from_df(planet, aper_width, aper_height):
+#     # There *must* be a faster way!
+#     aperwidth_columns = [colname
+#                          for colname in planet.photometry_df.columns
+#                          if 'aper_width' in colname]
+
+#     aperheight_columns = [colname
+#                           for colname in planet.photometry_df.columns
+#                           if 'aper_height' in colname]
+
+#     trace_length = np.median(planet.trace_lengths) - 0.1
+
+#     aperwidths_df = (planet.photometry_df[aperwidth_columns] - trace_length)
+#     aperwidths_df = aperwidths_df.astype(int)
+
+#     aperheight_df = planet.photometry_df[aperheight_columns].astype(int)
+#     aperwidth_flag = aperwidths_df.values[0] == aper_width
+#     aperheight_flag = aperheight_df.values[0] == aper_height
+
+#     return np.where(aperwidth_flag * aperheight_flag)  # [0][0]
 
 
 def print_flux_stddev(planet, aper_width, aper_height):
     # There *must* be a faster way!
-    flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
-    fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+    fluxes = planet.photometry_df[f'aperture_sum_{aper_width}x{aper_height}']
     fluxes = fluxes / np.median(fluxes)
 
     info_message(f'{aper_width}x{aper_height}: {np.std(fluxes)*1e6:0.0f} ppm')
@@ -60,8 +81,8 @@ def find_flux_stddev(planet, flux_std, aper_widths, aper_heights):
     # There *must* be a faster way!
     for aper_width in tqdm(aper_widths):
         for aper_height in tqdm(aper_heights):
-            flux_id = get_flux_idx_from_df(planet, aper_width, aper_height)
-            fluxes = planet.photometry_df[f'aperture_sum_{flux_id}']
+            flux_key = f'aperture_sum_{aper_width}x{aper_height}'
+            fluxes = planet.photometry_df[flux_key]
             fluxes = fluxes / np.median(fluxes)
 
             if np.std(fluxes) * 1e6 < flux_std:
@@ -338,9 +359,7 @@ def build_gp_pink_noise(times, data, dataerr,
     kernel = xo.gp.terms.SHOTerm(
         log_Sw4=log_Sw4, log_w0=log_w0, log_Q=log_Q)
 
-    gp = xo.gp.GP(kernel, times, dataerr ** 2 + pm.math.exp(log_s2))
-
-    return gp
+    return xo.gp.GP(kernel, times, dataerr ** 2 + pm.math.exp(log_s2))
 
 
 def run_pymc3_both(times, data, dataerr, t0, u, period, b,
@@ -367,10 +386,10 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
     with pm.Model() as model:
 
         # The baseline flux
-        mean_fwd = pm.Normal(f"mean{strfwd}", mu=1.0, sd=1.0)
+        mean_fwd = pm.Normal(f"mean{strfwd}", mu=0.0, sd=1.0)
 
         if idx_rev is not None:
-            mean_rev = pm.Normal(f"mean{strrev}", mu=1.0, sd=1.0)
+            mean_rev = pm.Normal(f"mean{strrev}", mu=0.0, sd=1.0)
 
         assert(not (allow_negative_edepths and use_log_edepth)),\
             'Cannot have `allow_negative_edepths` with `use_log_edepth`'
@@ -442,23 +461,29 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
 
         # # Here we track the value of the model light curve for plotting
         # # purposes
-        pm.Deterministic(f"light_curves{strfwd}", light_curves_fwd)
+        pm.Deterministic(f"light_curves{strfwd}", light_curve_fwd)
         if idx_rev is not None:
-            pm.Deterministic(f"light_curves{strrev}", light_curves_rev)
+            pm.Deterministic(f"light_curves{strrev}", light_curve_rev)
 
         # The likelihood function assuming known Gaussian uncertainty
         model_fwd = light_curve_fwd + line_fwd
-        pm.Normal(f"obs{strfwd}", mu=model_fwd,
-                  sd=dataerr[idx_fwd], observed=data[idx_fwd])
-
         if idx_rev is not None:
             model_rev = light_curve_rev + line_rev
-            pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
-                      sd=dataerr[idx_rev], observed=data[idx_rev])
 
         if use_pink_gp:
-            gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
-            gp.marginal("gp", observed=data)
+            gp = build_gp_pink_noise(
+                times, data, dataerr, log_Q=log_Q)
+            # gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
+            # mu, _ = xo.eval_in_model(model.test_point)
+
+            gp.marginal("gp", observed=data - model_fwd.flatten())
+        else:
+            pm.Normal(f"obs{strfwd}", mu=model_fwd,
+                      sd=dataerr[idx_fwd], observed=data[idx_fwd])
+
+            if idx_rev is not None:
+                pm.Normal(f"obs{strrev}", mu=light_curve_rev + line_rev,
+                          sd=dataerr[idx_rev], observed=data[idx_rev])
 
         # Fit for the maximum a posteriori parameters
         #   given the simuated dataset
@@ -482,6 +507,120 @@ def run_pymc3_both(times, data, dataerr, t0, u, period, b,
             )
         else:
             trace = None
+
+    return trace, map_soln
+
+
+def run_pymc3_w_gp(times, data, dataerr, t0, u, period, b,
+                   xcenters=None, ycenters=None,
+                   trace_angles=None, trace_lengths=None,
+                   log_Q=1 / np.sqrt(2), tune=5000, draws=5000,
+                   target_accept=0.9, do_mcmc=False, normalize=False,
+                   use_pink_gp=False, verbose=False):
+
+    times_bg = times - np.median(times)
+    with pm.Model() as model:
+
+        # The baseline flux
+        mean = pm.Normal(f"mean", mu=0.0, sd=1.0)
+
+        edepth = pm.Uniform("edepth", lower=0, upper=0.01)
+        edepth = pm.math.sqrt(edepth)
+
+        slope_time = pm.Uniform("slope_time", lower=-1, upper=1)
+        line_model = mean + slope_time * times_bg
+
+        if xcenters is not None:
+            med_ = np.median(xcenters)
+            std_ = np.std(xcenters)
+            xcenters = (xcenters - med_) / std_ if normalize else xcenters
+
+            slope_xc = pm.Uniform("slope_xcenter", lower=-1, upper=1)
+            line_model = line_model + slope_xc * xcenters
+
+        if ycenters is not None:
+            med_ = np.median(ycenters)
+            std_ = np.std(ycenters)
+            ycenters = (ycenters - med_) / std_ if normalize else ycenters
+
+            slope_yc = pm.Uniform("slope_ycenter", lower=-1, upper=1)
+            line_model = line_model + slope_yc * ycenters
+
+        if trace_angles is not None:
+            med_ = np.median(trace_angles)
+            std_ = np.std(trace_angles)
+            if normalize:
+                trace_angles = (trace_angles - med_) / std_
+
+            slope_angles = pm.Uniform("slope_trace_angle", lower=-1, upper=1)
+            line_model = line_model + slope_angles * trace_angles
+
+        if trace_lengths is not None:
+            med_ = np.median(trace_lengths)
+            std_ = np.std(trace_lengths)
+            if normalize:
+                trace_lengths = (trace_lengths - med_) / std_
+
+            slope_tl = pm.Uniform("slope_trace_length", lower=-1, upper=1)
+            line_model = line_model + slope_tl * trace_lengths
+
+        pm.Deterministic(f'line_model', line_model)
+
+        # Set up a Keplerian orbit for the planets
+        orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
+
+        # # Compute the model light curve using starry
+        star = xo.LimbDarkLightCurve(u)
+        light_curves = star.get_light_curve(
+            orbit=orbit, r=edepth, t=times)
+
+        light_curve = pm.math.sum(light_curves, axis=-1)
+
+        # # Here we track the value of the model light curve for plotting
+        # # purposes
+        pm.Deterministic("light_curve", light_curve)
+
+        # The likelihood function assuming known Gaussian uncertainty
+        model_full = light_curve + line_model
+
+        if use_pink_gp:
+            gp = build_gp_pink_noise(
+                times, data, dataerr, log_Q=log_Q)
+            # gp = build_gp_pink_noise(times, data, dataerr, log_Q=log_Q)
+            # mu, _ = xo.eval_in_model(model.test_point)
+
+            gp.marginal("gp", observed=data - model_full.flatten())
+
+            mu, _ = gp.predict(times, return_var=True, predict_mean=True)
+            # pm.Deterministic("light_curve", light_curve)
+            # help(pm.Deterministic)
+            # print(type("light_curve2"))
+            pm.Deterministic(name="gp_mu", var=mu)
+
+        else:
+            pm.Normal(f"obs", mu=model_full, sd=dataerr, observed=data)
+
+        # with pm.Model() as model:
+        # Fit for the maximum a posteriori parameters
+        #   given the simuated dataset
+        map_soln = xo.optimize(start=model.test_point)
+
+        if verbose:
+            ppm = 1e6
+            info_message(f'Map Soln Edepth:{map_soln["edepth"]*ppm}')
+
+        # with pm.Model() as model:
+        np.random.seed(42)
+        trace = None
+        if do_mcmc:
+            trace = pm.sample(
+                tune=tune,
+                draws=tune,
+                start=map_soln,
+                chains=mp.cpu_count(),
+                step=xo.get_dense_nuts_step(target_accept=target_accept),
+                cores=mp.cpu_count()
+            )
 
     return trace, map_soln
 
@@ -570,7 +709,7 @@ def configure_save_name(base_name=None, working_dir='', do_mcmc=True,
                         allow_negative_edepths=False):
 
     if base_name is None:
-        base_name = 'WASP43_fine_grain_photometry_20x20_208ppm'
+        base_name = f'{planet_name}_fine_grain_photometry_20x20_208ppm'
 
     fname_split = {True: 'w_fwd_rev_split',
                    False: 'no_fwd_rev_split'}[use_rev_fwd_split]
@@ -596,6 +735,28 @@ def compute_xo_lightcurve(planet_name, times, depth_ppm=1000, u=[0]):
     orbit = xo.orbits.KeplerianOrbit(period=period, t0=t0, b=b)
     return xo.LimbDarkLightCurve(u).get_light_curve(
         orbit=orbit, r=edepth, t=times).eval().flatten()
+
+
+def instantiate_arctor(planet_name, data_dir, working_dir, file_type,
+                       joblib_filename='', sort_by_time=False):
+    assert(False), ("This needs to be places in the examples. "
+                    "For some reason, `from .arctor import Arctor` "
+                    "does not work as it is expected to work.")
+
+    planet = Arctor(
+        planet_name=planet_name,
+        data_dir=data_dir,
+        working_dir=working_dir,
+        file_type=file_type)
+
+    if os.path.exists(joblib_filename):
+        info_message('Loading Data from Save File')
+        planet.load_dict(joblib_filename)
+    else:
+        info_message('Loading New Data Object')
+        planet.load_data(sort_by_time=sort_by_time)
+
+    return planet
 
 
 def instantiate_star_planet_system(  # Stellar parameters
@@ -667,8 +828,8 @@ def instantiate_star_planet_system(  # Stellar parameters
     return starry.System(A, b)
 
 
-def instantiate_arctor(planet_name, data_dir, working_dir, file_type,
-                       save_name_base='savedict'):
+def previous_instantiate_arctor(planet_name, data_dir, working_dir, file_type,
+                                save_name_base='savedict'):
     planet = Arctor(
         planet_name=planet_name,
         data_dir=data_dir,
@@ -687,17 +848,40 @@ def instantiate_arctor(planet_name, data_dir, working_dir, file_type,
     return planet
 
 
-def create_raw_lc_stddev(planet):
+def create_raw_lc_stddev(planet, reject_outliers=True):
     ppm = 1e6
     phot_vals = planet.photometry_df
-    lc_std_rev = phot_vals.iloc[planet.idx_rev].std(axis=0)
-    lc_std_fwd = phot_vals.iloc[planet.idx_fwd].std(axis=0)
+    n_columns = len(planet.photometry_df.columns)
 
-    lc_med_rev = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
-    lc_med_fwd = np.median(phot_vals.iloc[planet.idx_rev], axis=0)
+    # lc_med_fwd = np.zeros_like(n_columns)
+    # lc_med_rev = np.zeros_like(n_columns)
 
-    lc_std = np.mean([lc_std_rev, lc_std_fwd], axis=0)
-    lc_med = np.mean([lc_med_rev, lc_med_fwd], axis=0)
+    # lc_std_fwd = np.zeros_like(n_columns)
+    # lc_std_rev = np.zeros_like(n_columns)
+
+    lc_med = np.zeros(n_columns)
+    lc_std = np.zeros(n_columns)
+
+    for k, colname in enumerate(phot_vals.columns):
+        if reject_outliers:
+            inliers_fwd, inliers_rev = compute_inliers(
+                planet, aper_colname=colname, n_sig=2
+            )
+        else:
+            inliers_fwd = np.arange(planet.idx_fwd.size)
+            inliers_rev = np.arange(planet.idx_rev.size)
+
+        phots_rev = phot_vals[colname].iloc[planet.idx_rev].iloc[inliers_rev]
+        phots_fwd = phot_vals[colname].iloc[planet.idx_fwd].iloc[inliers_fwd]
+
+        lc_std_rev = mad_std(phots_rev)
+        lc_std_fwd = mad_std(phots_fwd)
+
+        lc_med_rev = np.median(phots_fwd)
+        lc_med_fwd = np.median(phots_fwd)
+
+        lc_std[k] = np.mean([lc_std_rev, lc_std_fwd])
+        lc_med[k] = np.mean([lc_med_rev, lc_med_fwd])
 
     return lc_std / lc_med * ppm
 
@@ -821,7 +1005,7 @@ def run_all_12_options(times, flux, uncs,
                        tune=3000, draws=3000, target_accept=0.9,
                        do_mcmc=False, save_as_you_go=False,
                        injected_light_curve=1.0, working_dir='./',
-                       base_name='WASP43_fine_grain_photometry_208ppm'):
+                       base_name=f'{planet_name}_fine_grain_photometry_208ppm'):
 
     decor_set = [xcenters, ycenters, trace_angles, trace_lengths]
     decor_options = [None, None, None, None,
@@ -895,7 +1079,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
                              tune=3000, draws=3000, target_accept=0.9,
                              do_mcmc=False, save_as_you_go=False,
                              injected_light_curve=1.0,
-                             base_name='WASP43_fine_grain_photometry_208ppm'):
+                             base_name=f'{planet_name}_fine_grain_photometry_208ppm'):
 
     base_name = f'{base_name}_near_best_{n_space}x{n_space}'
 
@@ -906,7 +1090,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -928,7 +1112,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -950,7 +1134,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -973,7 +1157,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
           'Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -996,7 +1180,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43, idx_fwd=idx_fwd, idx_rev=idx_rev,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet, idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         injected_light_curve=injected_light_curve,
         base_name=base_name, working_dir=working_dir,
@@ -1017,7 +1201,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43, idx_fwd=idx_fwd, idx_rev=idx_rev,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet, idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         injected_light_curve=injected_light_curve,
         base_name=base_name, working_dir=working_dir,
@@ -1039,7 +1223,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Linear Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1063,7 +1247,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
           'Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1086,7 +1270,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Default everything')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1109,7 +1293,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1130,7 +1314,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with xcenter')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1153,7 +1337,7 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
     print('Log Eclipse depth fits - Everything with xcenter and splitting fwd rev')
     fine_grain_mcmcs, filename = run_multiple_pymc3(
         times, fine_snr_flux, fine_snr_uncs, near_best_apertures_NxN_small,
-        t0=t0_guess, u=u, period=period_wasp43, b=b_wasp43,
+        t0=t0_guess, u=u, period=period_planet, b=b_planet,
         idx_fwd=idx_fwd, idx_rev=idx_rev,
         tune=tune, draws=draws, target_accept=target_accept,
         do_mcmc=do_mcmc, save_as_you_go=save_as_you_go,
@@ -1186,27 +1370,71 @@ def run_all_12_options_plain(times, fine_snr_flux, fine_snr_uncs,
             ]
 
 
+def rename_file(filename, data_dir='./', base_time=2400000.5,
+                format='jd', scale='utc'):
+
+    path_in = os.path.join(data_dir, filename)
+    header = fits.getheader(path_in, ext=0)
+    time_stamp = 0.5 * (header['EXPSTART'] + header['EXPEND'])
+    time_obj = astropy.time.Time(val=time_stamp, val2=base_time,
+                                 format=format, scale=scale)
+
+    out_filename = f'{time_obj.isot}_{filename}'
+    path_out = os.path.join(data_dir, out_filename)
+
+    os.rename(path_in, path_out)
+
+
+def compute_delta_sdnr(map_soln, phots, idx_fwd, idx_rev):
+    ppm = 1e6
+    phots_std_fwd = phots[idx_fwd].std()
+    phots_std_rev = phots[idx_rev].std()
+    phots_std = np.mean([phots_std_fwd, phots_std_rev])
+
+    if 'mean_fwd' not in map_soln.keys():
+        map_model = map_soln['light_curve'].flatten() + map_soln['line_model']
+    else:
+        map_model = np.zeros_like(times)
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten() + \
+            map_soln['line_model_fwd']
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten() + \
+            map_soln['line_model_rev']
+
+    varnames = [key for key in map_soln.keys(
+    ) if '__' not in key and 'light' not in key and 'line' not in key and 'le_edepth_0' not in key]
+
+    res_fwd = np.std(map_model[idx_fwd] - phots[idx_fwd])
+    res_rev = np.std(map_model[idx_rev] - phots[idx_rev])
+    res_std = np.mean([res_fwd, res_rev])
+
+    print(f'{str(varnames):<80}')
+    print(f'{res_std*ppm:0.2f}, {phots_std*ppm:0.2f}, {(phots_std - res_std)*ppm:0.2f} ppm difference'),
+
+    return res_std * ppm, phots_std * ppm, (phots_std - res_std) * ppm
+
+
 def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
                       use_idx_fwd_, use_xcenters_, use_ycenters_,
-                      use_trace_angles_, use_trace_lengths_):
+                      use_trace_angles_, use_trace_lengths_, use_pink_gp):
     ppm = 1e6
 
     phots = planet.normed_photometry_df[aper_column].values
     uncs = planet.normed_uncertainty_df[aper_column].values
+    phots = phots - np.median(phots)
 
     n_pts = len(phots)
 
     # 2 == eclipse depth + mean
     n_params = (2 + use_idx_fwd_ + use_xcenters_ + use_ycenters_ +
-                use_trace_angles_ + use_trace_lengths_)
+                use_trace_angles_ + use_trace_lengths_ + 3 * use_pink_gp)
 
     if 'mean_fwd' not in map_soln.keys():
-        map_model = map_soln['light_curves'].flatten() + map_soln['line_model']
+        map_model = map_soln['light_curve'].flatten() + map_soln['line_model']
     else:
         map_model = np.zeros_like(planet.times)
-        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten() + \
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten() + \
             map_soln['line_model_fwd']
-        map_model[idx_rev] = map_soln['light_curves_rev'].flatten() + \
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten() + \
             map_soln['line_model_rev']
 
         # if we split Fwd/Rev, then there are now 2 means
@@ -1222,9 +1450,47 @@ def compute_chisq_aic(planet, aper_column, map_soln, idx_fwd, idx_rev,
     return chisq_, aic_, bic_, sdnr_
 
 
+def compute_inliers(instance, aper_colname='aperture_sum_176x116', n_sig=2):
+
+    phots_ = instance.normed_photometry_df[aper_colname]
+
+    inliers_fwd = ~sigma_clip(phots_[instance.idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    inliers_rev = ~sigma_clip(phots_[instance.idx_rev],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    inliers_fwd = np.where(inliers_fwd)[0]
+    inliers_rev = np.where(inliers_rev)[0]
+
+    return inliers_fwd, inliers_rev
+
+
+def compute_outliers(instance, aper_colname='aperture_sum_176x116', n_sig=2):
+    phots_ = instance.normed_photometry_df[aper_colname]
+    outliers_fwd = sigma_clip(phots_[instance.idx_fwd],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+    outliers_rev = sigma_clip(phots_[instance.idx_rev],
+                              sigma=n_sig,
+                              maxiters=1,
+                              stdfunc=mad_std).mask
+
+    outliers_fwd = np.where(outliers_fwd)[0]
+    outliers_rev = np.where(outliers_rev)[0]
+
+    return outliers_fwd, outliers_rev
+
+
 def extract_map_only_data(planet, idx_fwd, idx_rev,
                           maps_only_filename=None,
-                          data_dir='notebooks'):
+                          data_dir='../savefiles',
+                          use_pink_gp=False):
 
     if maps_only_filename is None:
         maps_only_filename = 'results_decor_span_MAPs_all400_SDNR_only.joblib.save'
@@ -1305,7 +1571,8 @@ def extract_map_only_data(planet, idx_fwd, idx_rev,
                 use_xcenters[-1],
                 use_ycenters[-1],
                 use_trace_angles[-1],
-                use_trace_lengths[-1])
+                use_trace_lengths[-1],
+                use_pink_gp=use_pink_gp)
 
             sdnr_apers.append(sdnr_)
             chisq_apers.append(chisq_)
@@ -1418,15 +1685,15 @@ def organize_results_ppm_chisq_aic(n_options, idx_split, use_xcenters,
 
 def get_map_results_models(times, map_soln, idx_fwd, idx_rev):
     if 'mean_fwd' not in map_soln.keys():
-        map_model = map_soln['light_curves'].flatten()
+        map_model = map_soln['light_curve'].flatten()
         line_model = map_soln['line_model'].flatten()
     else:
         map_model = np.zeros_like(times)
         line_model = np.zeros_like(times)
-        map_model[idx_fwd] = map_soln['light_curves_fwd'].flatten()
+        map_model[idx_fwd] = map_soln['light_curve_fwd'].flatten()
         line_model[idx_fwd] = map_soln['line_model_fwd'].flatten()
 
-        map_model[idx_rev] = map_soln['light_curves_rev'].flatten()
+        map_model[idx_rev] = map_soln['light_curve_rev'].flatten()
         line_model[idx_rev] = map_soln['line_model_rev'].flatten()
 
     return map_model, line_model

@@ -20,7 +20,7 @@ ext1 = Extension('arctor.dwt._dwt',
 extensions = [ext1]
 
 setup(name='arctor',
-      version=0.1,
+      version=0.2,
       description='Extracting Photometry from Scanning Mode HST Observations '
       ' and other arc-like observations that require a rectangular aperture',
       long_description=open('README.md').read(),
