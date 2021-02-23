@@ -706,7 +706,7 @@ def run_multiple_pymc3(times, fine_snr_flux, fine_snr_uncs, aper_sum_columns,
 def configure_save_name(base_name=None, working_dir='', do_mcmc=True,
                         use_xcenter=False, use_log_edepth=False,
                         use_rev_fwd_split=False, use_injection=False,
-                        allow_negative_edepths=False):
+                        allow_negative_edepths=False, planet_name="planet_name"):
 
     if base_name is None:
         base_name = f'{planet_name}_fine_grain_photometry_20x20_208ppm'
